@@ -9,7 +9,8 @@ extern void conv2d_int8_naive(
     int out_zp, int32_t multiplier, int shift);
 
 // 定义一个指向外部仿真器假串口地址的挥发性指针
-volatile unsigned int * const UART_TX = (unsigned int *)0x10000000;
+// 将地址改到物理 SRAM 范围内，借用 SRAM 的硬件握手逻辑
+volatile unsigned int * const UART_TX = (unsigned int *)0x000E0000;
 
 // 自定义的最简打印函数
 void my_putc(char c) {

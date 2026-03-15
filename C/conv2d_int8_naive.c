@@ -4,6 +4,7 @@
 // 包含了量化参数 (Scale 和 Zero Point)
 extern const int8_t conv1_weight_int8[];
 extern const int32_t conv1_bias_int32[];
+extern void my_print(const char *str) 
 
 /**
  * @brief 朴素版 INT8 2D 卷积 (带有重量化逻辑)
@@ -38,6 +39,7 @@ void conv2d_int8_naive(
 
     // 1. 遍历输出通道
     for (int oc = 0; oc < out_channels; oc++) {
+        my_print("-");
         // 2. 遍历输出特征图的 Y 坐标
         for (int oy = 0; oy < out_size; oy++) {
             // 3. 遍历输出特征图的 X 坐标

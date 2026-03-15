@@ -4,7 +4,7 @@
 // 包含了量化参数 (Scale 和 Zero Point)
 extern const int8_t conv1_weight_int8[];
 extern const int32_t conv1_bias_int32[];
-extern void my_print(const char *str) 
+extern void my_print(const char *str);
 
 /**
  * @brief 朴素版 INT8 2D 卷积 (带有重量化逻辑)

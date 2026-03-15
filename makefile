@@ -22,13 +22,13 @@ CFLAGS  = -march=rv32imc -mabi=ilp32 -I$(C_DIR) -Wall -O2
 LDFLAGS = -T $(LDSCRIPT) -nostartfiles
 
 # 5. 编译目标 (Targets)
-all: firmware.hex
+all: firmware_byte.hex
 
 firmware.elf: $(ASM_SRC) $(C_SRCS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(ASM_SRC) $(C_SRCS) -o $@
 
-firmware.hex: firmware.elf
+firmware_byte.hex: firmware.elf
 	$(OBJCOPY) -O verilog $< $@
 
 clean:
-	rm -f firmware.elf firmware.hex
+	rm firmware.elf,firmware.hex,firmware_byte.hex

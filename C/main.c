@@ -8,8 +8,23 @@ extern void conv2d_int8_naive(
     int in_channels, int out_channels, int in_size, int kernel_size,
     int out_zp, int32_t multiplier, int shift);
 
+// 定义一个指向外部仿真器假串口地址的挥发性指针
+volatile unsigned int * const UART_TX = (unsigned int *)0x10000000;
+
+// 自定义的最简打印函数
+void my_putc(char c) {
+    *UART_TX = c; // 往这个地址写数据，Testbench 就会在终端打印出来
+}
+
+// 如果你需要打印字符串
+void my_print(const char *str) {
+    while (*str) {
+        my_putc(*str++);
+    }
+}
+
 int main() {
-    printf("===== RISC-V Bit-True Golden Model Test =====\n");
+    my_print("===== RISC-V Bit-True Golden Model Test =====\n");
 
     // 为 C 语言输出分配一块内存
     int8_t c_output[16 * 32 * 32] = {0};
@@ -19,7 +34,7 @@ int main() {
     int shift = 16;
     int out_zp = 0;
 
-    printf("Executing Conv2D with real CIFAR-10 Image...\n");
+    my_print("Executing Conv2D with real CIFAR-10 Image...\n");
     
     // 执行运算
     conv2d_int8_naive(
@@ -28,7 +43,7 @@ int main() {
         out_zp, multiplier, shift
     );
 
-    printf("Conv2D finished! Validating Results...\n");
+    my_print("Conv2D finished! Validating Results...\n");
 
     // 【核心】比特级对齐检查
     int error_count = 0;
@@ -37,18 +52,17 @@ int main() {
     for (int i = 0; i < total_pixels; i++) {
         if (c_output[i] != expected_conv1_output[i]) {
             if (error_count < 5) { // 打印前几个错误
-                printf("Mismatch at index %d: C_out=%d, Expected=%d\n", i, c_output[i], expected_conv1_output[i]);
+                my_print("Mismatch at index...\n");
             }
             error_count++;
         }
     }
 
     if (error_count == 0) {
-        printf("\n[SUCCESS] PERFECT MATCH! 0 errors out of %d elements.\n", total_pixels);
-        printf("你的 C 语言纯整数黄金模型已经建立！\n");
+        my_print("\n[SUCCESS] PERFECT MATCH! 0 errors...\n");
     } else {
-        printf("\n[FAILED] Found %d errors out of %d elements.\n", error_count, total_pixels);
+        // my_print("\n[FAILED] Found %d errors out of %d elements.\n", error_count, total_pixels);
+        my_print("\n[FAILED] Found errors...\n");
     }
-
     return 0;
 }

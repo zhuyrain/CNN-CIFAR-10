@@ -2,6 +2,20 @@
 # RISC-V 裸机编译 Makefile
 # ==========================================
 
+# ==========================================
+# 跨平台环境检测 (Cross-Platform OS Detection)
+# ==========================================
+ifeq ($(OS),Windows_NT)
+    # Windows 环境 (cmd.exe)
+    RM = del /Q /F
+    # 将斜杠统一替换为 Windows 认识的反斜杠 (可选，防呆设计)
+    FixPath = $(subst /,\,$1)
+else
+    # Linux / macOS 环境 (bash/sh)
+    RM = rm -f
+    FixPath = $1
+endif
+
 # 1. 工具链定义
 PREFIX  = riscv-none-elf-
 CC      = $(PREFIX)gcc
@@ -31,4 +45,5 @@ firmware_byte.hex: firmware.elf
 	$(OBJCOPY) -O verilog $< $@
 
 clean:
-	rm firmware.elf,firmware.hex,firmware_byte.hex
+	# 使用宏变量替代写死的命令，严格使用空格分隔
+	$(RM) $(call FixPath, firmware.elf firmware.hex firmware_byte.hex)

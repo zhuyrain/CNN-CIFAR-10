@@ -5,9 +5,16 @@
 # ==========================================
 # 跨平台环境检测 (Cross-Platform OS Detection)
 # ==========================================
+
+# # 强制绑定 shell 引擎，防止 Git Bash 干扰
+# # 暂时用不到
+# ifeq ($(OS),Windows_NT)
+#     SHELL := cmd.exe
+# endif
+
 ifeq ($(OS),Windows_NT)
     # Windows 环境 (cmd.exe)
-    RM = del /Q /F
+    RM = cmd /c del /Q /F
     # 将斜杠统一替换为 Windows 认识的反斜杠 (可选，防呆设计)
     FixPath = $(subst /,\,$1)
 else
@@ -20,15 +27,20 @@ endif
 PREFIX  = riscv-none-elf-
 CC      = $(PREFIX)gcc
 OBJCOPY = $(PREFIX)objcopy
+PY      = python
 
 # 2. 文件夹路径
 C_DIR   = C
 RV_DIR  = RISCV
+PYTHON_DIR  = python
 
 # 3. 源文件定义
-C_SRCS  = $(C_DIR)/main.c $(C_DIR)/conv2d_int8_naive.c
+C_SRCS  = $(C_DIR)/main.c $(C_DIR)/conv2d_int8_naive.c $(C_DIR)/my_printf.c
 ASM_SRC = $(RV_DIR)/start.S
 LDSCRIPT= $(RV_DIR)/custom.lds
+
+# 3.1 python源文件定义
+CONV_HEX  = $(PYTHON_DIR)/convert_hex.py
 
 # 4. 编译选项
 # -I$(C_DIR) 的作用是告诉编译器去 C/ 文件夹下寻找引用的 .h 头文件
@@ -36,14 +48,18 @@ CFLAGS  = -march=rv32imc -mabi=ilp32 -I$(C_DIR) -Wall -O2
 LDFLAGS = -T $(LDSCRIPT) -nostartfiles
 
 # 5. 编译目标 (Targets)
-all: firmware_byte.hex
+all: firmware.hex
+conv: firmware_byte.hex
 
 firmware.elf: $(ASM_SRC) $(C_SRCS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(ASM_SRC) $(C_SRCS) -o $@
 
-firmware_byte.hex: firmware.elf
+firmware.hex: firmware.elf
 	$(OBJCOPY) -O verilog $< $@
 
+firmware_byte.hex: firmware.hex
+	$(PY) $(CONV_HEX) $< $@
+
 clean:
-	# 使用宏变量替代写死的命令，严格使用空格分隔
+# 使用宏变量替代写死的命令，严格使用空格分隔
 	$(RM) $(call FixPath, firmware.elf firmware.hex firmware_byte.hex)

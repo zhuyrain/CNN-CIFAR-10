@@ -4,8 +4,16 @@
 #include <stdint.h>
 
 // ================= 全局统一量化参数 =================
-// Global_Scale: s_in=0.007874015748031496
-// L1: Mult=104, Shift=16 | L2: Mult=177, Shift=16 | FC: Mult=160, Shift=16
+const float GLOBAL_S_IN = 0.007874015748031496;
+
+const int32_t L1_MULT = 104;
+const int32_t L1_SHIFT = 16;
+
+const int32_t L2_MULT = 177;
+const int32_t L2_SHIFT = 16;
+
+const int32_t FC_MULT = 160;
+const int32_t FC_SHIFT = 16;
 
 const int8_t test_input_img[3072] = {
     117, 115, 116, 116, 116, 116, 116, 116, 116, 116, 116, 116, 116, 116, 116, 116, 

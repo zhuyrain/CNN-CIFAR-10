@@ -2,30 +2,15 @@
 #include <stdint.h>
 // 引入刚刚 Python 生成的真实测试向量！
 #include "../python/test_vector.h" 
+#include "my_printf.h"
 
 extern void conv2d_int8_naive(
     const int8_t* input, const int8_t* weight, const int32_t* bias, int8_t* output,
     int in_channels, int out_channels, int in_size, int kernel_size,
     int out_zp, int32_t multiplier, int shift);
 
-// 定义一个指向外部仿真器假串口地址的挥发性指针
-// 将地址改到物理 SRAM 范围内，借用 SRAM 的硬件握手逻辑
-volatile unsigned int * const UART_TX = (unsigned int *)0x000E0000;
-
-// 自定义的最简打印函数
-void my_putc(char c) {
-    *UART_TX = c; // 往这个地址写数据，Testbench 就会在终端打印出来
-}
-
-// 如果你需要打印字符串
-void my_print(const char *str) {
-    while (*str) {
-        my_putc(*str++);
-    }
-}
-
 int main() {
-    my_print("===== RISC-V Bit-True Golden Model Test =====\n");
+    my_printf("===== RISC-V Bit-True Golden Model Test =====\n");
 
     // 为 C 语言输出分配一块内存
     int8_t c_output[16 * 32 * 32] = {0};
@@ -35,7 +20,7 @@ int main() {
     int shift = 16;
     int out_zp = 0;
 
-    my_print("Executing Conv2D with real CIFAR-10 Image...\n");
+    my_printf("Executing Conv2D with real CIFAR-10 Image...\n");
     
     // 执行运算
     conv2d_int8_naive(
@@ -44,7 +29,7 @@ int main() {
         out_zp, multiplier, shift
     );
 
-    my_print("Conv2D finished! Validating Results...\n");
+    my_printf("Conv2D finished! Validating Results...\n");
 
     // 【核心】比特级对齐检查
     int error_count = 0;
@@ -53,17 +38,17 @@ int main() {
     for (int i = 0; i < total_pixels; i++) {
         if (c_output[i] != expected_conv1_output[i]) {
             if (error_count < 5) { // 打印前几个错误
-                my_print("Mismatch at index...\n");
+                my_printf("Mismatch at index...\n");
             }
             error_count++;
         }
     }
 
     if (error_count == 0) {
-        my_print("\n[SUCCESS] PERFECT MATCH! 0 errors...\n");
+        my_printf("\n[SUCCESS] PERFECT MATCH! 0 errors...\n");
     } else {
-        // my_print("\n[FAILED] Found %d errors out of %d elements.\n", error_count, total_pixels);
-        my_print("\n[FAILED] Found errors...\n");
+        // my_printf("\n[FAILED] Found %d errors out of %d elements.\n", error_count, total_pixels);
+        my_printf("\n[FAILED] Found errors...\n");
     }
     return 0;
 }

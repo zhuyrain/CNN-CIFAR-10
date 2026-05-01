@@ -2,14 +2,6 @@
 #include "my_printf.h"
 
 #include <stdint.h>
-// #include "npu_weights_int8.h"
-
-
-// 假设这些来自你 Python 导出的头文件
-// 包含了量化参数 (Scale 和 Zero Point)
-// extern const int8_t conv1_weight_int8[];
-// extern const int32_t conv1_bias_int32[];
-// extern void my_print(const char *str);
 
 /**
  * @brief 朴素版 INT8 2D 卷积 (带有重量化逻辑)
@@ -88,7 +80,7 @@ void conv2d_int8_naive(
 
                 // 饱和截断 (Clip to INT8)
                 if (requantized > 127) requantized = 127;
-                if (requantized < -128) requantized = -128;
+                if (requantized < -127) requantized = -127;
 
                 // 写入输出数组
                 int out_idx = (oc * out_size * out_size) + (oy * out_size) + ox;

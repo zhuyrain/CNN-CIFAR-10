@@ -6,29 +6,10 @@
 #include <stdio.h>
 #include <stdint.h>
 // ==========================================
-// 1. 核心算子声明 (部分为待实现的占位函数)
+// 1. 核心算子声明
 // ==========================================
 
-// // 已有的纯 INT8 卷积计算算子
-// extern void conv2d_int8_naive_x86(
-//     const int8_t* input, const int8_t* weight, const int32_t* bias, int8_t* output,
-//     int in_channels, int out_channels, int in_size, int kernel_size,
-//     int out_zp, int32_t multiplier, int shift);
-
-// // [待实现] 原地激活的 ReLU 算子 (因为是 max(0, x)，直接覆盖原数组最省内存)
-// extern void relu_int8(int8_t* data, int size);
-
-// // [待实现] 2x2 最大池化算子
-// extern void maxpool2d_int8(
-//     const int8_t* input, int8_t* output, 
-//     int channels, int in_size, int pool_size, int stride);
-
-// // [待实现] 全连接层算子
-// extern void linear_int8(
-//     const int8_t* input, const int8_t* weight, const int32_t* bias, int8_t* output,
-//     int in_features, int out_features, 
-//     int32_t multiplier, int shift);
-
+// 已于conv2d_int8_naive_x86.h和other_int8_naive.h中声明
 
 // ==========================================
 // 2. 主流程：端到端 CIFAR-10 推理

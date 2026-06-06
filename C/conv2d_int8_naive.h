@@ -17,7 +17,7 @@ void conv2d_int8_naive(
     int shift);
 
 void relu_int8(int8_t* data, int size);
-void maxpool2d_int8(
+void maxpool2d_int8_hwc(
     const int8_t* input, int8_t* output, 
     int channels, int in_size, int pool_size, int stride);
 void linear_int8(

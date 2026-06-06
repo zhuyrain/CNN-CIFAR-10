@@ -107,37 +107,30 @@ void relu_int8(int8_t* data, int size) {
 }
 
 /**
- * @brief 2D 最大池化算子 (INT8)
- * 默认前提：输入数据的内存排布为标准的 CHW (Channel, Height, Width) 格式
+ * @brief 2D 最大池化算子 (INT8) - HWC (通道交织) 专用版！
+ * 完美匹配 NPU 写回的 AXI 连续数据包格式
  */
-void maxpool2d_int8(
+void maxpool2d_int8_hwc(
     const int8_t* input, int8_t* output, 
     int channels, int in_size, int pool_size, int stride) 
 {
-    // 计算输出特征图的边长尺寸
     int out_size = (in_size - pool_size) / stride + 1;
     
-    // 遍历每一个通道
-    for (int c = 0; c < channels; c++) {
-        int channel_in_offset = c * in_size * in_size;
-        int channel_out_offset = c * out_size * out_size;
-        
-        // 遍历输出特征图的高 (Y) 和 宽 (X)
-        for (int out_y = 0; out_y < out_size; out_y++) {
-            for (int out_x = 0; out_x < out_size; out_x++) {
+    // HWC 格式的遍历最佳顺序：先遍历空间 H 和 W，最后遍历通道 C (保持缓存局部性)
+    for (int out_y = 0; out_y < out_size; out_y++) {
+        for (int out_x = 0; out_x < out_size; out_x++) {
+            for (int c = 0; c < channels; c++) {
                 
-                // 初始化最大值为 INT8 的理论最小值 (-128)
                 int8_t max_val = -128;
                 
-                // 在 pool_size x pool_size 的滑动窗口内寻找最大值
                 for (int py = 0; py < pool_size; py++) {
                     for (int px = 0; px < pool_size; px++) {
-                        // 映射回输入特征图的绝对坐标
                         int in_y = out_y * stride + py;
                         int in_x = out_x * stride + px;
                         
-                        // 计算 1D 数组中的绝对索引
-                        int in_idx = channel_in_offset + (in_y * in_size) + in_x;
+                        // 【核心修改：HWC 一维数组绝对寻址公式！】
+                        // Index = (Y * W * C) + (X * C) + C
+                        int in_idx = (in_y * in_size * channels) + (in_x * channels) + c;
                         
                         if (input[in_idx] > max_val) {
                             max_val = input[in_idx];
@@ -145,8 +138,8 @@ void maxpool2d_int8(
                     }
                 }
                 
-                // 将找到的最大值写入输出特征图
-                int out_idx = channel_out_offset + (out_y * out_size) + out_x;
+                // 将找到的最大值写入输出 (同样保持 HWC 格式！)
+                int out_idx = (out_y * out_size * channels) + (out_x * channels) + c;
                 output[out_idx] = max_val;
             }
         }

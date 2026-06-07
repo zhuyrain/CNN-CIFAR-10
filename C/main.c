@@ -101,7 +101,30 @@ int main() {
     my_printf("[2/5] CPU Executing MaxPool 1...\n");
     maxpool2d_int8_hwc(buf_conv1, buf_pool1, 16, 32, 2, 2);
     my_printf("      [OK] CPU Pool1 Complete!\n");
-
+    // -----------------------------------------------------------
+    // 打印池化前 (Conv1 输出) 的前 8 个 32-bit Word
+    // -----------------------------------------------------------
+    my_printf(">>> Checking NPU Conv1 Output (First 8 Words / 2 Pixels) <<<\n");
+    uint32_t* ptr_conv11_32b = (uint32_t*)buf_conv1;
+    
+    // 前 8 个 Word 刚好包含：Pixel(0,0) 的 16通道 和 Pixel(0,1) 的 16通道！
+    for (int i = 0; i < 8; i++) {
+        uint32_t val = ptr_conv11_32b[i];
+        
+        // 拆解出 4 个 8-bit 通道 (验证小端序 OC3, OC2, OC1, OC0)
+        int8_t c0 = (int8_t)(val & 0xFF);
+        int8_t c1 = (int8_t)((val >> 8) & 0xFF);
+        int8_t c2 = (int8_t)((val >> 16) & 0xFF);
+        int8_t c3 = (int8_t)((val >> 24) & 0xFF);
+        
+        int pixel_idx = i / 4;  // 每 4 个 Word 是一个像素
+        int ch_base = (i % 4) * 4;
+        
+        // 由于你的 my_printf 可能不支持 %08x，用 %d 打印分解的值最稳妥
+        my_printf("  Pixel(0,%d) CH[%d~%d]: OC%d=%d, OC%d=%d, OC%d=%d, OC%d=%d\n", 
+                  pixel_idx, ch_base+3, ch_base,
+                  ch_base+3, c3, ch_base+2, c2, ch_base+1, c1, ch_base+0, c0);
+    }
     // -----------------------------------------------------------
     // Layer 2: Hardware Conv2 (16x16x16 -> 16x16x32)
     // -----------------------------------------------------------

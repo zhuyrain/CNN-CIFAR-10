@@ -147,33 +147,48 @@ void maxpool2d_int8_hwc(
 }
 
 /**
- * @brief 全连接层 (Linear) 算子 (INT8)
- * 物理意义：一维向量与二维权重矩阵的乘法，并附带偏置相加和重量化
+ * @brief 全连接层 (Linear) 算子 (INT8) - 适配 HWC 输入！
+ * 物理意义：权重期望 CHW 展开，但实际输入为 HWC 格式。我们在运算时进行动态地址重映射。
  */
-void linear_int8(
-    const int8_t* input, const int8_t* weight, const int32_t* bias, int8_t* output,
-    int in_features, int out_features, 
+void linear_int8_hwc(
+    const int8_t* input_hwc, const int8_t* weight_chw, const int32_t* bias, int8_t* output,
+    int in_c, int in_h, int in_w, int out_features, 
     int32_t multiplier, int shift) 
 {
-    // 遍历每一个输出神经元
+    // 遍历每一个输出分类神经元 (0~9)
     for (int out_idx = 0; out_idx < out_features; out_idx++) {
         
-        // 1. 初始化累加器为当前神经元的 Bias（利用 32 位寄存器防溢出）
+        // 1. 初始化累加器为当前神经元的 Bias
         int32_t acc = bias[out_idx];
         
-        // 2. 执行向量内积 (乘加运算 MAC)
-        // 注意 weight 的排布：在 PyTorch 中，Linear 权重的 shape 是 (out_features, in_features)
-        int weight_row_offset = out_idx * in_features;
-        for (int in_idx = 0; in_idx < in_features; in_idx++) {
-            // 强转 int32_t 是为了防止 8bit * 8bit 瞬间溢出
-            acc += (int32_t)input[in_idx] * (int32_t)weight[weight_row_offset + in_idx];
+        int weight_row_offset = out_idx * (in_c * in_h * in_w);
+        
+        // 2. 遍历 CHW 逻辑坐标，但分别映射到 Weight 和 Input 的物理一维数组中
+        for (int c = 0; c < in_c; c++) {
+            for (int h = 0; h < in_h; h++) {
+                for (int w = 0; w < in_w; w++) {
+                    
+                    // Python PyTorch 导出的权重期望的展开索引 (CHW)
+                    // Index = c * (H * W) + h * W + w
+                    int chw_idx = c * (in_h * in_w) + h * in_w + w;
+                    
+                    // 硬件 NPU 实际吐出的物理特征图索引 (HWC)
+                    // Index = h * (W * C) + w * C + c
+                    int hwc_idx = h * (in_w * in_c) + w * in_c + c;
+                    
+                    // 动态坐标对齐乘加！
+                    acc += (int32_t)input_hwc[hwc_idx] * (int32_t)weight_chw[weight_row_offset + chw_idx];
+                }
+            }
         }
         
-        // 3. 硬件友好的重量化 (Re-quantization)
-        // 完美复刻 Python 中的: q_fc_out = clamp((mac_fc * mult_fc) >> shift_fc, -127, 127)
+        // 3. 重量化 (Re-quantization)
         int32_t scaled_acc = (acc * multiplier) >> shift;
         
-        // 4. 钳位并写入输出缓存
-        output[out_idx] = (int8_t)CLAMP_INT8(scaled_acc);
+        // 4. 饱和截断 (Clip to INT8) -> 直接当做 ReLU
+        if (scaled_acc > 127)       scaled_acc = 127;
+        else if (scaled_acc < -128) scaled_acc = -128; // 如果不带ReLU，底线是 -128
+        
+        output[out_idx] = (int8_t)scaled_acc;
     }
 }

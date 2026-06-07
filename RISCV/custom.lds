@@ -2,9 +2,9 @@
 ENTRY(_start)
 
 /* 定义物理内存布局 (起始于 0x0 的 2MB SRAM) */
-MEMORY
-{
-    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 2M
+/* 假装 SRAM 只有 2MB - 1KB，给 UART 留出防波堤 */
+MEMORY {
+    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 2047K
 }
 
 SECTIONS

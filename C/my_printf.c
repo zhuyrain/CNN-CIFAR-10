@@ -7,7 +7,7 @@
 // 定义一个指向外部仿真器假串口地址的挥发性指针
 // 将地址改到物理 SRAM 范围内，借用 SRAM 的硬件握手逻辑
 // 强制使用确定位宽的指针，避免任何对齐或总线截断问题
-volatile uint32_t * const UART_TX = (uint32_t *)0x000E0000;
+volatile uint32_t * const UART_TX = (uint32_t *)0x001FFFF0;
 
 // 自定义的最简打印函数
 void my_putc(char c) {

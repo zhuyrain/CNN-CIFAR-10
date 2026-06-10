@@ -4,34 +4,49 @@ def convert_hex(input_file, output_file):
     with open(input_file, 'r') as f:
         lines = f.readlines()
 
-    byte_list = []
+    # 使用字典模拟真正的物理 SRAM，键为物理字节地址，默认值为 '00'
+    memory = {}
+    current_byte_addr = 0
+    max_addr = 0
+
     for line in lines:
         line = line.strip()
-        if line.startswith('@'):
+        if not line:
             continue
-        # 按空格分割出每一个 byte
-        tokens = line.split()
-        byte_list.extend(tokens)
+        
+        if line.startswith('@'):
+            # 捕获 objcopy 吐出的物理基地址，绝对不能丢弃！
+            current_byte_addr = int(line[1:], 16)
+        else:
+            tokens = line.split()
+            for token in tokens:
+                # 将字节精确地存入对应的物理地址
+                memory[current_byte_addr] = token
+                if current_byte_addr > max_addr:
+                    max_addr = current_byte_addr
+                current_byte_addr += 1
 
-    # 如果字节数不是 4 的倍数，在末尾补 00
-    while len(byte_list) % 4 != 0:
-        byte_list.append("00")
+    # 计算一共需要输出多少个 32-bit Word (向上取整)
+    max_word_addr = max_addr // 4
 
     with open(output_file, 'w') as f:
-        # 每次取 4 个字节，按小端序拼接
-        for i in range(0, len(byte_list), 4):
-            byte0 = byte_list[i]
-            byte1 = byte_list[i+1]
-            byte2 = byte_list[i+2]
-            byte3 = byte_list[i+3]
+        # 严格按照物理地址递增，每 4 个字节打包成一个 Word
+        for i in range(max_word_addr + 1):
+            base = i * 4
+            
+            # 如果链接器在这个地址留了空白，.get() 会自动用 '00' 填充 (完美保留 Padding!)
+            b0 = memory.get(base + 0, '00')
+            b1 = memory.get(base + 1, '00')
+            b2 = memory.get(base + 2, '00')
+            b3 = memory.get(base + 3, '00')
             
             # 小端序：高地址放在高位
-            word_32bit = byte3 + byte2 + byte1 + byte0
+            word_32bit = b3 + b2 + b1 + b0
             f.write(word_32bit + '\n')
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python pack_hex.py <input.hex> <output.hex>")
+        print("Usage: python convert_hex.py <input.hex> <output.hex>")
         sys.exit(1)
     
     convert_hex(sys.argv[1], sys.argv[2])

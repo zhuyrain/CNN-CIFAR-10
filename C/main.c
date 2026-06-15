@@ -105,14 +105,14 @@ int main() {
     maxpool2d_int8_hwc(buf_conv1, buf_pool1, 16, 32, 2, 2);
     my_printf("      [OK] CPU Pool1 Complete!\n");
     // -----------------------------------------------------------
-    // 打印池化前 (Conv1 输出) 的前 8 个 32-bit Word
+    // 打印池化后 (Pool1 输出) 的前 8 个 32-bit Word
     // -----------------------------------------------------------
-    my_printf(">>> Checking NPU Conv1 Output (First 8 Words / 2 Pixels) <<<\n");
-    uint32_t* ptr_conv11_32b = (uint32_t*)buf_conv1;
+    my_printf(">>> Checking CPU Pool1 Output (First 8 Words / 2 Pils) <<<\n");
+    uint32_t* ptr_pool1_32b = (uint32_t*)buf_pool1;
     
-    // 前 8 个 Word 刚好包含：Pixel(0,0) 的 16通道 和 Pixel(0,1) 的 16通道！
+    // Pool 完之后，长宽变成 16x16，但通道交织格式和深度 (16) 完全没变！
     for (int i = 0; i < 8; i++) {
-        uint32_t val = ptr_conv11_32b[i];
+        uint32_t val = ptr_pool1_32b[i];
         
         // 拆解出 4 个 8-bit 通道 (验证小端序 OC3, OC2, OC1, OC0)
         int8_t c0 = (int8_t)(val & 0xFF);

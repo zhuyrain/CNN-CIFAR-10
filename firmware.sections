@@ -1,18 +1,18 @@
-There are 11 section headers, starting at offset 0x9824:
+There are 11 section headers, starting at offset 0x9864:
 
 Section Headers:
   [Nr] Name              Type            Addr     Off    Size   ES Flg Lk Inf Al
   [ 0]                   NULL            00000000 000000 000000 00      0   0  0
-  [ 1] .text             PROGBITS        00000000 001000 0008cc 00  AX  0   0  2
-  [ 2] .rodata           PROGBITS        000008cc 0018cc 007936 00   A  0   0  4
-  [ 3] .srodata          PROGBITS        00008204 009204 000020 00   A  0   0  4
-  [ 4] .data             PROGBITS        00008224 009224 000000 00  WA  0   0  1
-  [ 5] .bss              NOBITS          00008224 009224 00780c 00  WA  0   0  4
-  [ 6] .riscv.attributes RISCV_ATTRIBUTE 00000000 009224 000036 00      0   0  1
-  [ 7] .comment          PROGBITS        00000000 00925a 000033 01  MS  0   0  1
-  [ 8] .symtab           SYMTAB          00000000 009290 000340 10      9  19  4
-  [ 9] .strtab           STRTAB          00000000 0095d0 0001fa 00      0   0  1
-  [10] .shstrtab         STRTAB          00000000 0097ca 000058 00      0   0  1
+  [ 1] .text             PROGBITS        00000000 001000 0008ce 00  AX  0   0  2
+  [ 2] .rodata           PROGBITS        000008d0 0018d0 007972 00   A  0   0  4
+  [ 3] .srodata          PROGBITS        00008244 009244 000020 00   A  0   0  4
+  [ 4] .data             PROGBITS        00008264 009264 000000 00  WA  0   0  1
+  [ 5] .bss              NOBITS          00008264 009264 00780c 00  WA  0   0  4
+  [ 6] .riscv.attributes RISCV_ATTRIBUTE 00000000 009264 000036 00      0   0  1
+  [ 7] .comment          PROGBITS        00000000 00929a 000033 01  MS  0   0  1
+  [ 8] .symtab           SYMTAB          00000000 0092d0 000340 10      9  19  4
+  [ 9] .strtab           STRTAB          00000000 009610 0001fa 00      0   0  1
+  [10] .shstrtab         STRTAB          00000000 00980a 000058 00      0   0  1
 Key to Flags:
   W (write), A (alloc), X (execute), M (merge), S (strings), I (info),
   L (link order), O (extra OS processing required), G (group), T (TLS),

@@ -45,8 +45,8 @@ void wait_npu_done() {
 // 4. 主函数 (全网端到端推理)
 // ==========================================
 int main() {
-    my_printf("Input Base: %d\n", test_input_img_packed32);
-    my_printf("Weight Base: %d\n", test_conv1_weight_packed32);
+    my_printf("Input Base: %d\n", test_input_img);
+    my_printf("Weight Base: %d\n", test_conv1_weight);
     my_printf("Conv1 Out Base: %d\n", buf_conv1);
     my_printf("===== RISC-V & NPU End-to-End CNN Inference =====\n");
 
@@ -61,12 +61,12 @@ int main() {
     NPU_REG_CFG_DPATH   = (16 << 16) | (9 << 10) | (34 << 4) | 1;
     
     // 输入图片地址是固定的
-    NPU_REG_ACT_BASE    = (uint32_t)test_input_img_packed32;
+    NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
 
     // Conv1: 16 输出通道，分 4 次 Pass (4 * 4 = 16)
     for (int pass = 0; pass < 4; pass++) {
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 16);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight_packed32 + (pass * 144);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 144);
         NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 4);
 
         NPU_REG_CTRL_STATUS = 0x00000001; // START!
@@ -143,7 +143,7 @@ int main() {
     for (int pass = 0; pass < 8; pass++) {
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 16);
         // Conv2 每个 pass 需要装载 36 个权重字 (36 * 4 * 4 = 576 bytes)
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight_packed32 + (pass * 576);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 576);
         NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 4);
 
         NPU_REG_CTRL_STATUS = 0x00000001; // START!

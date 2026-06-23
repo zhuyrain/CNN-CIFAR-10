@@ -57,8 +57,8 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       // H=32, W=32
     NPU_REG_CFG_QUANT   = (L1_SHIFT << 16) | L1_MULT; 
-    // Out_Stride=16, W_Num=9, LB_W=34, IC_G=1
-    NPU_REG_CFG_DPATH   = (16 << 16) | (9 << 10) | (34 << 4) | 1;
+    // Out_Stride=16, W_Num=9, LB_W=34, IC_G=1 but need minus 1
+    NPU_REG_CFG_DPATH   = (16 << 18) | (9 << 10) | (34 << 4) | 0;
     
     // 输入图片地址是固定的
     NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
@@ -135,8 +135,8 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       // H=16, W=16
     NPU_REG_CFG_QUANT   = (L2_SHIFT << 16) | L2_MULT; 
-    // Out_Stride=32, W_Num=36, LB_W=18, IC_G=4
-    NPU_REG_CFG_DPATH   = (32 << 16) | (36 << 10) | (18 << 4) | 4; 
+    // Out_Stride=32, W_Num=36, LB_W=18, IC_G=4 but need minus 1
+    NPU_REG_CFG_DPATH   = (32 << 18) | (36 << 10) | (18 << 4) | 3; 
     NPU_REG_ACT_BASE    = (uint32_t)buf_pool1;   // ⬅️ 数据源变成了 Pool1 的输出！
 
     // Conv2: 32 输出通道，分 8 次 Pass (8 * 4 = 32)

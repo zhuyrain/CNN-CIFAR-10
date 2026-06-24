@@ -78,8 +78,7 @@ int main() {
     }
     
     // ===========================================================
-    // 【赛点校验】：仅核对 Conv1 物理输出的前 8 个 32-bit Word
-    // 此时一个像素包含 64 个通道，8 个 Word 正好是一个像素的前 32 个通道
+    // 校验 Conv1
     // ===========================================================
     my_printf("\n>>> Checking NPU Conv1 Output (First 8 Words / 32 Channels) <<<\n");
     uint32_t* ptr_conv1_32b = (uint32_t*)buf_conv1;
@@ -104,25 +103,13 @@ int main() {
         int8_t e3 = (int8_t)((exp >> 24) & 0xFF);
         
         if (val == exp) {
-            // 完全匹配，只打印一行简要信息
             my_printf("  Word[%d] CH[%d~%d]: MATCH\n", i, ch_base+3, ch_base);
         } else {
-            // 发生不匹配，提示属于哪个 Word
             my_printf("  [ERROR] Word[%d] CH[%d~%d] Mismatch:\n", i, ch_base+3, ch_base);
-            
-            // 逐通道比对，精准挑出算错的通道并用十进制打印
-            if (c3 != e3) {
-                my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
-            }
-            if (c2 != e2) {
-                my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
-            }
-            if (c1 != e1) {
-                my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
-            }
-            if (c0 != e0) {
-                my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
-            }
+            if (c3 != e3) my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
+            if (c2 != e2) my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
+            if (c1 != e1) my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
+            if (c0 != e0) my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
         }
     }
 
@@ -148,16 +135,78 @@ int main() {
         wait_npu_done();
     }
 
+    // ===========================================================
+    // 校验 Conv2 + Relu
+    // ===========================================================
+    my_printf("\n>>> Checking NPU Conv2 + Relu Output (First 8 Words / 32 Channels) <<<\n");
+    ptr_conv1_32b = (uint32_t*)buf_conv2;
+    ptr_exp1_32b  = (uint32_t*)expected_act2_output;
+    
+    for (int i = 0; i < 384; i++) {
+        uint32_t val = ptr_conv1_32b[i];
+        uint32_t exp = ptr_exp1_32b[i];
+        
+        int ch_base = i * 4;
+        
+        // 提取硬件计算输出的 4 个通道 (8-bit)
+        int8_t c0 = (int8_t)(val & 0xFF);
+        int8_t c1 = (int8_t)((val >> 8) & 0xFF);
+        int8_t c2 = (int8_t)((val >> 16) & 0xFF);
+        int8_t c3 = (int8_t)((val >> 24) & 0xFF);
+        
+        // 提取预期输出的 4 个通道 (8-bit)
+        int8_t e0 = (int8_t)(exp & 0xFF);
+        int8_t e1 = (int8_t)((exp >> 8) & 0xFF);
+        int8_t e2 = (int8_t)((exp >> 16) & 0xFF);
+        int8_t e3 = (int8_t)((exp >> 24) & 0xFF);
+        
+        if (val == exp) {
+            my_printf("  Word[%d] CH[%d~%d]: MATCH\n", i, ch_base+3, ch_base);
+        } else {
+            my_printf("  [ERROR] Word[%d] CH[%d~%d] Mismatch:\n", i, ch_base+3, ch_base);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
+        }
+    }
+
     // -----------------------------------------------------------
     // Layer 3: Software Pool1 (32x32x64 -> 16x16x64)
     // -----------------------------------------------------------
     my_printf("\n[3/7] CPU Executing MaxPool 1...\n");
     maxpool2d_int8_hwc(buf_conv2, buf_pool1, 64, 32, 2, 2);
 
+    // ===========================================================
+    // 校验 Pool1
+    // ===========================================================
+    my_printf("\n>>> Checking CPU Pool1 Output (First 8 Words / 32 Channels) <<<\n");
+    uint32_t* ptr_pool1_32b = (uint32_t*)buf_pool1;
+    uint32_t* ptr_expp1_32b = (uint32_t*)expected_pool1_output;
+    
+    for (int i = 0; i < 8; i++) {
+        uint32_t val = ptr_pool1_32b[i];
+        uint32_t exp = ptr_expp1_32b[i];
+        int ch_base = i * 4;
+        
+        int8_t c0 = (int8_t)(val & 0xFF), c1 = (int8_t)((val >> 8) & 0xFF), c2 = (int8_t)((val >> 16) & 0xFF), c3 = (int8_t)((val >> 24) & 0xFF);
+        int8_t e0 = (int8_t)(exp & 0xFF), e1 = (int8_t)((exp >> 8) & 0xFF), e2 = (int8_t)((exp >> 16) & 0xFF), e3 = (int8_t)((exp >> 24) & 0xFF);
+        
+        if (val == exp) {
+            my_printf("  Word[%d] CH[%d~%d]: MATCH\n", i, ch_base+3, ch_base);
+        } else {
+            my_printf("  [ERROR] Word[%d] CH[%d~%d] Mismatch:\n", i, ch_base+3, ch_base);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
+        }
+    }
+
     // -----------------------------------------------------------
     // Layer 4: Hardware Conv3 (16x16x64 -> 16x16x64)
     // -----------------------------------------------------------
-    my_printf("[4/7] Executing NPU Layer 3 (Conv3: 64 OC, 64 IC)...\n");
+    my_printf("\n[4/7] Executing NPU Layer 3 (Conv3: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       // H=16, W=16
     NPU_REG_CFG_QUANT   = (L3_SHIFT << 16) | L3_MULT; 
@@ -172,6 +221,32 @@ int main() {
 
         NPU_REG_CTRL_STATUS = 0x00000001;
         wait_npu_done();
+    }
+
+    // ===========================================================
+    // 校验 Conv3
+    // ===========================================================
+    my_printf("\n>>> Checking NPU Conv3 Output (First 8 Words / 32 Channels) <<<\n");
+    uint32_t* ptr_conv3_32b = (uint32_t*)buf_conv3;
+    uint32_t* ptr_exp3_32b  = (uint32_t*)expected_act3_output;
+    
+    for (int i = 0; i < 8; i++) {
+        uint32_t val = ptr_conv3_32b[i];
+        uint32_t exp = ptr_exp3_32b[i];
+        int ch_base = i * 4;
+        
+        int8_t c0 = (int8_t)(val & 0xFF), c1 = (int8_t)((val >> 8) & 0xFF), c2 = (int8_t)((val >> 16) & 0xFF), c3 = (int8_t)((val >> 24) & 0xFF);
+        int8_t e0 = (int8_t)(exp & 0xFF), e1 = (int8_t)((exp >> 8) & 0xFF), e2 = (int8_t)((exp >> 16) & 0xFF), e3 = (int8_t)((exp >> 24) & 0xFF);
+        
+        if (val == exp) {
+            my_printf("  Word[%d] CH[%d~%d]: MATCH\n", i, ch_base+3, ch_base);
+        } else {
+            my_printf("  [ERROR] Word[%d] CH[%d~%d] Mismatch:\n", i, ch_base+3, ch_base);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
+        }
     }
 
     // -----------------------------------------------------------
@@ -199,10 +274,36 @@ int main() {
     my_printf("\n[6/7] CPU Executing MaxPool 2...\n");
     maxpool2d_int8_hwc(buf_conv4, buf_pool2, 64, 16, 2, 2);
 
+    // ===========================================================
+    // 校验 Pool2
+    // ===========================================================
+    my_printf("\n>>> Checking CPU Pool2 Output (First 8 Words / 32 Channels) <<<\n");
+    uint32_t* ptr_pool2_32b = (uint32_t*)buf_pool2;
+    uint32_t* ptr_expp2_32b = (uint32_t*)expected_pool2_output;
+    
+    for (int i = 0; i < 8; i++) {
+        uint32_t val = ptr_pool2_32b[i];
+        uint32_t exp = ptr_expp2_32b[i];
+        int ch_base = i * 4;
+        
+        int8_t c0 = (int8_t)(val & 0xFF), c1 = (int8_t)((val >> 8) & 0xFF), c2 = (int8_t)((val >> 16) & 0xFF), c3 = (int8_t)((val >> 24) & 0xFF);
+        int8_t e0 = (int8_t)(exp & 0xFF), e1 = (int8_t)((exp >> 8) & 0xFF), e2 = (int8_t)((exp >> 16) & 0xFF), e3 = (int8_t)((exp >> 24) & 0xFF);
+        
+        if (val == exp) {
+            my_printf("  Word[%d] CH[%d~%d]: MATCH\n", i, ch_base+3, ch_base);
+        } else {
+            my_printf("  [ERROR] Word[%d] CH[%d~%d] Mismatch:\n", i, ch_base+3, ch_base);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+3, c3, e3);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+2, c2, e2);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base+1, c1, e1);
+            my_printf("    -> CH[%d] HW: %d | EXP: %d\n", ch_base,   c0, e0);
+        }
+    }
+
     // -----------------------------------------------------------
     // Layer 7: Software Fully Connected (8x8x64 -> 10)
     // -----------------------------------------------------------
-    my_printf("[7/7] CPU Executing Fully Connected Layer...\n");
+    my_printf("\n[7/7] CPU Executing Fully Connected Layer...\n");
     
     linear_int8_hwc(
         buf_pool2, test_fc_weight, test_fc_bias, buf_fc,

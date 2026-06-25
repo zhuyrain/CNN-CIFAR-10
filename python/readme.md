@@ -1,4 +1,4 @@
-## ## python子文件夹中各文件的作用
+## python子文件夹中各文件的作用
 
 ### cifar10_fp32_baseline.ipynb
 

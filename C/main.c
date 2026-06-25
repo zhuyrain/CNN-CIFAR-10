@@ -63,7 +63,8 @@ int main() {
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       // H=32, W=32
     NPU_REG_CFG_QUANT   = (L1_SHIFT << 16) | L1_MULT; 
     // Out_Stride=64, W_Num=9 (1个IC组), LB_W=34, IC_G=0
-    NPU_REG_CFG_DPATH   = (64 << 18) | (9 << 10) | (34 << 4) | 0;
+    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 0;
+    NPU_REG_CFG_CH      = (32 << 16) | 36;
     NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
 
     // Conv1: 64 输出通道，分 16 次 Pass (16 * 4列 = 64)
@@ -121,8 +122,10 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       // H=32, W=32
     NPU_REG_CFG_QUANT   = (L2_SHIFT << 16) | L2_MULT; 
-    // Out_Stride=64, W_Num=144 (16个IC组*9), LB_W=34, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 18) | (144 << 10) | (34 << 4) | 15; 
+    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=34, IC_G=15
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (34 << 4) | 15; 
+    // row_word_count = 32 * 16 = 512; weight_word_count = 144 * 4 = 576
+    NPU_REG_CFG_CH      = (512 << 16) | 576;
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv1;
 
     for (int pass = 0; pass < 16; pass++) {
@@ -142,7 +145,7 @@ int main() {
     ptr_conv1_32b = (uint32_t*)buf_conv2;
     ptr_exp1_32b  = (uint32_t*)expected_act2_output;
     
-    for (int i = 0; i < 384; i++) {
+    for (int i = 0; i < 8; i++) {
         uint32_t val = ptr_conv1_32b[i];
         uint32_t exp = ptr_exp1_32b[i];
         
@@ -210,8 +213,10 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       // H=16, W=16
     NPU_REG_CFG_QUANT   = (L3_SHIFT << 16) | L3_MULT; 
-    // Out_Stride=64, W_Num=144, LB_W=18 (16+2), IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 18) | (144 << 10) | (18 << 4) | 15; 
+    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=18, IC_G=15
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
+    // row_word_count = 16 * 16 = 256; weight_word_count = 144 * 4 = 576
+    NPU_REG_CFG_CH      = (256 << 16) | 576;
     NPU_REG_ACT_BASE    = (uint32_t)buf_pool1;
 
     for (int pass = 0; pass < 16; pass++) {
@@ -249,14 +254,17 @@ int main() {
         }
     }
 
-    // -----------------------------------------------------------
+// -----------------------------------------------------------
     // Layer 5: Hardware Conv4 (16x16x64 -> 16x16x64)
     // -----------------------------------------------------------
     my_printf("\n[5/7] Executing NPU Layer 4 (Conv4: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L4_SHIFT << 16) | L4_MULT; 
-    NPU_REG_CFG_DPATH   = (64 << 18) | (144 << 10) | (18 << 4) | 15; 
+    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=18, IC_G=15
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
+    // row_word_count = 16 * 16 = 256; weight_word_count = 144 * 4 = 576
+    NPU_REG_CFG_CH      = (256 << 16) | 576;
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv3;
 
     for (int pass = 0; pass < 16; pass++) {

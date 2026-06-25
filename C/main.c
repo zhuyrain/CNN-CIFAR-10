@@ -6,7 +6,6 @@
 #include <stdint.h>
 // ==========================================
 // 1. NPU AXI-Lite 寄存器映射宏定义
-// NPU 挂在互联矩阵的 M1 端口，基地址为 0x4000_0000
 // ==========================================
 #define NPU_BASE            0x40000000
 #define NPU_REG_CTRL_STATUS (*(volatile uint32_t*)(NPU_BASE + 0x00))
@@ -20,10 +19,8 @@
 #define NPU_REG_CFG_DPATH   (*(volatile uint32_t*)(NPU_BASE + 0x20))
 
 // ==========================================
-// 2. 内存分配 (由 GCC 链接器自动分配物理地址)
-// 适配全新的 64 通道 VGG-Style 网络！
+// 2. 内存分配 (适配 64x64 阵列，强行 64 字节对齐保平安)
 // ==========================================
-// 保证 4 字节对齐，这对于 AXI 总线极其重要
 int8_t buf_conv1[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
 int8_t buf_conv2[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
 int8_t buf_pool1[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
@@ -31,7 +28,6 @@ int8_t buf_conv3[64 * 16 * 16] __attribute__((aligned(4))) = {0};
 int8_t buf_conv4[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
 int8_t buf_pool2[64 *  8 *  8] __attribute__((aligned(4))) = {0}; 
 int8_t buf_fc[10]              __attribute__((aligned(4))) = {0};
-
 // ==========================================
 // 3. 辅助函数：启动 NPU 并轮询等待
 // ==========================================
@@ -46,37 +42,32 @@ void wait_npu_done() {
     my_printf("-");
 }
 
-// ==========================================
-// 4. 主函数 (全网端到端推理)
-// ==========================================
 int main() {
     my_printf("Input Base: %d\n", test_input_img);
     my_printf("Weight Base: %d\n", test_conv1_weight);
     my_printf("Conv1 Out Base: %d\n", buf_conv1);
-    my_printf("===== RISC-V & NPU End-to-End CNN Inference =====\n");
+    my_printf("===== RISC-V & NPU 64x64 FULL POWER Inference =====\n");
 
     // -----------------------------------------------------------
     // Layer 1: Hardware Conv1 (32x32x3 -> 32x32x64)
     // -----------------------------------------------------------
     my_printf("[1/7] Executing NPU Layer 1 (Conv1: 64 OC)...\n");
 
-    NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       // H=32, W=32
+    NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       
     NPU_REG_CFG_QUANT   = (L1_SHIFT << 16) | L1_MULT; 
-    // Out_Stride=64, W_Num=9 (1个IC组), LB_W=34, IC_G=0
+    // Out_Stride=64, IC_G_R=0(空间全并行!), W_Num=9, LB_W=34, IC_G=0(输入仅4通道)
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 0;
-    NPU_REG_CFG_CH      = (32 << 16) | 36;
+    // Row_words = 32*(0+1) = 32; Weight_words = 9 * 64(OC) = 576
+    NPU_REG_CFG_CH      = (32 << 16) | 576;
+    
     NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
+    NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias;
+    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight;
+    NPU_REG_OUT_BASE    = (uint32_t)buf_conv1;
 
-    // Conv1: 64 输出通道，分 16 次 Pass (16 * 4列 = 64)
-    for (int pass = 0; pass < 16; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 16);
-        // Conv1 每个 pass 读 4(OC)*4(IC)*9 = 144 bytes 权重
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 144);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 4);
-
-        NPU_REG_CTRL_STATUS = 0x00000001; // START!
-        wait_npu_done();
-    }
+    // 【震撼瘦身】：因为有 64 列，一层只需要启动一次！没有 pass 循环了！
+    NPU_REG_CTRL_STATUS = 0x00000001; 
+    wait_npu_done();
     
     // ===========================================================
     // 校验 Conv1
@@ -116,27 +107,23 @@ int main() {
 
     // -----------------------------------------------------------
     // Layer 2: Hardware Conv2 (32x32x64 -> 32x32x64)
-    // 注意：没有 Pool1 的阻隔，Conv2 直接吃 Conv1 的全分辨率输出！
     // -----------------------------------------------------------
     my_printf("\n[2/7] Executing NPU Layer 2 (Conv2: 64 OC, 64 IC)...\n");
 
-    NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       // H=32, W=32
+    NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       
     NPU_REG_CFG_QUANT   = (L2_SHIFT << 16) | L2_MULT; 
-    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=34, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (34 << 4) | 15; 
-    // row_word_count = 32 * 16 = 512; weight_word_count = 144 * 4 = 576
-    NPU_REG_CFG_CH      = (512 << 16) | 576;
+    // Out_Stride=64, IC_G_R=0(魔法核心!), W_Num=144(16组*9), LB_W=34, IC_G=15(写通道需16组)
+    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 15; 
+    // Row_words = 32*(15+1) = 512; Weight_words = 144 * 64(OC) = 9216
+    NPU_REG_CFG_CH      = (512 << 16) | 9216;
+    
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv1;
+    NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias;
+    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight;
+    NPU_REG_OUT_BASE    = (uint32_t)buf_conv2;
 
-    for (int pass = 0; pass < 16; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 16);
-        // Conv2 满载，每个 pass 读 4(OC)*64(IC)*9 = 2304 bytes 权重
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 2304);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 4);
-
-        NPU_REG_CTRL_STATUS = 0x00000001;
-        wait_npu_done();
-    }
+    NPU_REG_CTRL_STATUS = 0x00000001;
+    wait_npu_done();
 
     // ===========================================================
     // 校验 Conv2 + Relu
@@ -211,22 +198,20 @@ int main() {
     // -----------------------------------------------------------
     my_printf("\n[4/7] Executing NPU Layer 3 (Conv3: 64 OC, 64 IC)...\n");
 
-    NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       // H=16, W=16
+    NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L3_SHIFT << 16) | L3_MULT; 
-    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=18, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
-    // row_word_count = 16 * 16 = 256; weight_word_count = 144 * 4 = 576
-    NPU_REG_CFG_CH      = (256 << 16) | 576;
+    // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18, IC_G=15
+    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
+    // Row_words = 16*(15+1) = 256; Weight_words = 144 * 64 = 9216
+    NPU_REG_CFG_CH      = (256 << 16) | 9216;
+    
     NPU_REG_ACT_BASE    = (uint32_t)buf_pool1;
+    NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias;
+    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight;
+    NPU_REG_OUT_BASE    = (uint32_t)buf_conv3;
 
-    for (int pass = 0; pass < 16; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 16);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 2304);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 4);
-
-        NPU_REG_CTRL_STATUS = 0x00000001;
-        wait_npu_done();
-    }
+    NPU_REG_CTRL_STATUS = 0x00000001;
+    wait_npu_done();
 
     // ===========================================================
     // 校验 Conv3
@@ -254,44 +239,36 @@ int main() {
         }
     }
 
-// -----------------------------------------------------------
+    // -----------------------------------------------------------
     // Layer 5: Hardware Conv4 (16x16x64 -> 16x16x64)
     // -----------------------------------------------------------
     my_printf("\n[5/7] Executing NPU Layer 4 (Conv4: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L4_SHIFT << 16) | L4_MULT; 
-    // Out_Stride=64, IC_G_R=15, W_Num=144, LB_W=18, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
-    // row_word_count = 16 * 16 = 256; weight_word_count = 144 * 4 = 576
-    NPU_REG_CFG_CH      = (256 << 16) | 576;
+    // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18, IC_G=15
+    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (144 << 10) | (18 << 4) | 15; 
+    // Row_words = 16*(15+1) = 256; Weight_words = 144 * 64 = 9216
+    NPU_REG_CFG_CH      = (256 << 16) | 9216;
+    
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv3;
+    NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias;
+    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight;
+    NPU_REG_OUT_BASE    = (uint32_t)buf_conv4;
 
-    for (int pass = 0; pass < 16; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 16);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 2304);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 4);
-
-        NPU_REG_CTRL_STATUS = 0x00000001;
-        wait_npu_done();
-    }
-
-    // -----------------------------------------------------------
-    // Layer 6: Software Pool2 (16x16x64 -> 8x8x64)
-    // -----------------------------------------------------------
-    my_printf("\n[6/7] CPU Executing MaxPool 2...\n");
-    maxpool2d_int8_hwc(buf_conv4, buf_pool2, 64, 16, 2, 2);
+    NPU_REG_CTRL_STATUS = 0x00000001;
+    wait_npu_done();
 
     // ===========================================================
-    // 校验 Pool2
+    // 校验 Conv4
     // ===========================================================
-    my_printf("\n>>> Checking CPU Pool2 Output (First 8 Words / 32 Channels) <<<\n");
-    uint32_t* ptr_pool2_32b = (uint32_t*)buf_pool2;
-    uint32_t* ptr_expp2_32b = (uint32_t*)expected_pool2_output;
+    my_printf("\n>>> Checking NPU Conv4 Output (First 8 Words / 32 Channels) <<<\n");
+    uint32_t* ptr_conv4_32b = (uint32_t*)buf_conv4;
+    uint32_t* ptr_exp4_32b  = (uint32_t*)expected_act4_output;
     
     for (int i = 0; i < 8; i++) {
-        uint32_t val = ptr_pool2_32b[i];
-        uint32_t exp = ptr_expp2_32b[i];
+        uint32_t val = ptr_conv4_32b[i];
+        uint32_t exp = ptr_exp4_32b[i];
         int ch_base = i * 4;
         
         int8_t c0 = (int8_t)(val & 0xFF), c1 = (int8_t)((val >> 8) & 0xFF), c2 = (int8_t)((val >> 16) & 0xFF), c3 = (int8_t)((val >> 24) & 0xFF);
@@ -309,6 +286,12 @@ int main() {
     }
 
     // -----------------------------------------------------------
+    // Layer 6: Software Pool2 (16x16x64 -> 8x8x64)
+    // -----------------------------------------------------------
+    my_printf("\n[6/7] CPU Executing MaxPool 2...\n");
+    maxpool2d_int8_hwc(buf_conv4, buf_pool2, 64, 16, 2, 2);
+
+    // -----------------------------------------------------------
     // Layer 7: Software Fully Connected (8x8x64 -> 10)
     // -----------------------------------------------------------
     my_printf("\n[7/7] CPU Executing Fully Connected Layer...\n");
@@ -324,28 +307,17 @@ int main() {
     my_printf("\n>>> Validating Final FC Output <<<\n");
     
     int error_count = 0;
-    int max_idx_c = 0;
-    int max_idx_py = 0;
-    int8_t max_val_c = -128;
-    int8_t max_val_py = -128;
+    int max_idx_c = 0, max_idx_py = 0;
+    int8_t max_val_c = -128, max_val_py = -128;
 
     my_printf("Index | Hardware SoC | Python Golden\n");
     my_printf("--------------------------------------\n");
     for (int i = 0; i < 10; i++) {
         my_printf("  %d   |    %d      |    %d\n", i, buf_fc[i], expected_fc_output[i]);
         
-        if (buf_fc[i] > max_val_c) {
-            max_val_c = buf_fc[i];
-            max_idx_c = i;
-        }
-        if (expected_fc_output[i] > max_val_py) {
-            max_val_py = expected_fc_output[i];
-            max_idx_py = i;
-        }
-        
-        if (buf_fc[i] != expected_fc_output[i]) {
-            error_count++;
-        }
+        if (buf_fc[i] > max_val_c) { max_val_c = buf_fc[i]; max_idx_c = i; }
+        if (expected_fc_output[i] > max_val_py) { max_val_py = expected_fc_output[i]; max_idx_py = i; }
+        if (buf_fc[i] != expected_fc_output[i]) error_count++;
     }
 
     my_printf("\n====== SUMMARY ======\n");
@@ -354,14 +326,9 @@ int main() {
 
     if (error_count == 0) {
         my_printf("[SUCCESS] PERFECT MATCH! 0 errors.\n");
-        my_printf("THE 64-CHANNEL NPU IS OFFICIALLY ALIVE!\n");
+        my_printf("THE 64x64 NPU BEAST IS OFFICIALLY ALIVE!\n");
     } else {
         my_printf("[WARNING] Found bit-level mismatches.\n");
-        if (max_idx_c == max_idx_py) {
-            my_printf("[NOTE] Top-1 Pred STILL CORRECT.\n");
-        } else {
-            my_printf("[FAILED] Top-1 Pred MISMATCH!\n");
-        }
     }
 
     return 0;

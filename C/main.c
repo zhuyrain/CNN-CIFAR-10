@@ -247,7 +247,7 @@ int main() {
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L4_SHIFT << 16) | L4_MULT; 
     // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (144 << 10) | (18 << 4) | 15; 
+    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
     // Row_words = 16*(15+1) = 256; Weight_words = 144 * 64 = 9216
     NPU_REG_CFG_CH      = (256 << 16) | 9216;
     

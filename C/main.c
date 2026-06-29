@@ -86,21 +86,22 @@ int main() {
     NPU_REG_CFG_QUANT   = (L1_SHIFT << 16) | L1_MULT; 
     // Out_Stride=64, IC_G_R=0(空间全并行!), W_Num=9, LB_W=34, IC_G=0(输入仅4通道)
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 0;
-    NPU_REG_CFG_DPATH2  = (64 << 16) | (0xFFFF);
-    // Row_words = 32*(0+1) = 32; Weight_words = 9 * 64(OC) = 576
-    NPU_REG_CFG_CH      = (32 << 16) | 576;
+    NPU_REG_CFG_DPATH2  = (4 << 16) | (0xFFFF);
+    // Row_words = 32*(0+1) = 32; Weight_words = 144 * 4(OC) = 576
+    NPU_REG_CFG_CH      = (32 << 16) | 36;
     
     NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
-    NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias;
-    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight;
-    NPU_REG_OUT_BASE    = (uint32_t)buf_conv1;
 
     // 启动 NPU 计算
-    // 【震撼瘦身】：因为有 64 列，一层只需要启动一次！没有 pass 循环了！
-    NPU_REG_CTRL_STATUS = 0x00000001; 
-    
-    // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
-    wait_npu_done();
+    for (int pass = 0; pass < 16; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 16);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 144);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 4);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
     
     // ===========================================================
     // 校验 Conv1
@@ -146,18 +147,23 @@ int main() {
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       
     NPU_REG_CFG_QUANT   = (L2_SHIFT << 16) | L2_MULT; 
     // Out_Stride=64, IC_G_R=0(魔法核心!), W_Num=144(16组*9), LB_W=34, IC_G=15(写通道需16组)
-    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 15;
-    NPU_REG_CFG_DPATH2  = (64 << 16) | (0xFFFF); 
-    // Row_words = 32*(15+1) = 512; Weight_words = 144 * 64(OC) = 9216
-    NPU_REG_CFG_CH      = (512 << 16) | 9216;
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (34 << 4) | 15;
+    NPU_REG_CFG_DPATH2  = (4 << 16) | (0xFFFF); 
+    // Row_words = 32*(15+1) = 512; Weight_words = 144 * 4(OC) = 576
+    NPU_REG_CFG_CH      = (512 << 16) | 576;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv1;
-    NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias;
-    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight;
-    NPU_REG_OUT_BASE    = (uint32_t)buf_conv2;
 
-    NPU_REG_CTRL_STATUS = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 16; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 16);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 2304);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 4);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // ===========================================================
     // 校验 Conv2 + Relu
@@ -235,18 +241,23 @@ int main() {
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L3_SHIFT << 16) | L3_MULT; 
     // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
-    NPU_REG_CFG_DPATH2  = (64 << 16) | (0xFFFF);
-    // Row_words = 16*(15+1) = 256; Weight_words = 144 * 64 = 9216
-    NPU_REG_CFG_CH      = (256 << 16) | 9216;
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
+    NPU_REG_CFG_DPATH2  = (4 << 16) | (0xFFFF);
+    // Row_words = 16*(15+1) = 256; Weight_words = 144 * 4 = 576
+    NPU_REG_CFG_CH      = (256 << 16) | 576;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_pool1;
-    NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias;
-    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight;
-    NPU_REG_OUT_BASE    = (uint32_t)buf_conv3;
 
-    NPU_REG_CTRL_STATUS = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 16; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 16);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 2304);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 4);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // ===========================================================
     // 校验 Conv3
@@ -282,18 +293,23 @@ int main() {
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
     NPU_REG_CFG_QUANT   = (L4_SHIFT << 16) | L4_MULT; 
     // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18, IC_G=15
-    NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
-    NPU_REG_CFG_DPATH2  = (64 << 16) | (0xFFFF);
+    NPU_REG_CFG_DPATH   = (64 << 22) | (15 << 18) | (144 << 10) | (18 << 4) | 15; 
+    NPU_REG_CFG_DPATH2  = (4 << 16) | (0xFFFF);
     // Row_words = 16*(15+1) = 256; Weight_words = 144 * 64 = 9216
-    NPU_REG_CFG_CH      = (256 << 16) | 9216;
+    NPU_REG_CFG_CH      = (256 << 16) | 576;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv3;
-    NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias;
-    NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight;
-    NPU_REG_OUT_BASE    = (uint32_t)buf_conv4;
 
-    NPU_REG_CTRL_STATUS = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 16; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 16);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 2304);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 4);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // ===========================================================
     // 校验 Conv4

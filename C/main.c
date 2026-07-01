@@ -83,17 +83,17 @@ int main() {
     my_printf("[1/7] Executing NPU Layer 1 (Conv1: 64 OC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       
-    NPU_REG_CFG_QUANT   = (L1_SHIFT << 16) | L1_MULT; 
+    NPU_REG_CFG_QUANT   = (64 << 24) | (1 << 22) | (1 << 21) | (L1_SHIFT << 16) | L1_MULT; 
     // Out_Stride=64, IC_G_R=0(空间全并行!), W_Num=9, LB_W=34, IC_G=0(输入仅4通道)
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 0;
-    NPU_REG_CFG_DPATH2  = (32 << 16) | (0x00FF);
+    NPU_REG_CFG_DPATH2  = (0 << 16) | (0xFFFF);
     // Row_words = 32*(0+1) = 32; Weight_words = 144 * 4(OC) = 576
-    NPU_REG_CFG_CH      = (32 << 16) | 288;
+    NPU_REG_CFG_CH      = (32 << 16) | 576;
     
     NPU_REG_ACT_BASE    = (uint32_t)test_input_img;
 
     // 启动 NPU 计算
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < 1; pass++) {
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 4 * 32);
         NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 1152);
         NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 32);
@@ -146,18 +146,18 @@ int main() {
     my_printf("\n[2/7] Executing NPU Layer 2 (Conv2: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (32 << 16) | 32;       
-    NPU_REG_CFG_QUANT   = (L2_SHIFT << 16) | L2_MULT; 
+    NPU_REG_CFG_QUANT   = (64 << 24) | (1 << 22) | (1 << 21) | (L2_SHIFT << 16) | L2_MULT; 
     // Out_Stride=64 保持不变(完美兼容HWC), IC_G_R=0, W_Num=144, LB_W=34, IC_G=15
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (34 << 4) | 15;
     // 每次计算 32 OC，掩码 0x00FF (8个Group)
-    NPU_REG_CFG_DPATH2  = (32 << 16) | (0x00FF); 
+    NPU_REG_CFG_DPATH2  = (0 << 16) | (0xFFFF); 
     // Row_words = 32*(15+1) = 512; Weight_words = 144 * 32(OC) = 4608
-    NPU_REG_CFG_CH      = (512 << 16) | 4608;
+    NPU_REG_CFG_CH      = (512 << 16) | 9216;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv1;
 
     // 启动 NPU 计算 (仅需 2 个 Pass)
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < 1; pass++) {
         // 每次偏移 32 个 Bias (32 * 4 bytes = 128 bytes)
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 128);
         // 每次偏移 4608 个 Word 权重 (4608 * 4 bytes = 18432 bytes)
@@ -244,16 +244,16 @@ int main() {
     my_printf("\n[4/7] Executing NPU Layer 3 (Conv3: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
-    NPU_REG_CFG_QUANT   = (L3_SHIFT << 16) | L3_MULT; 
+    NPU_REG_CFG_QUANT   = (64 << 24) | (1 << 22) | (1 << 21) | (L3_SHIFT << 16) | L3_MULT; 
     // Out_Stride=64, IC_G_R=0, W_Num=144, LB_W=18(变小了), IC_G=15
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
-    NPU_REG_CFG_DPATH2  = (32 << 16) | (0x00FF);
+    NPU_REG_CFG_DPATH2  = (0 << 16) | (0xFFFF);
     // Row_words = 16*(15+1) = 256; Weight_words = 144 * 32 = 4608
-    NPU_REG_CFG_CH      = (256 << 16) | 4608;
+    NPU_REG_CFG_CH      = (256 << 16) | 9216;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_pool1;
 
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < 1; pass++) {
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 128);
         NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 18432);
         NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 32);
@@ -295,15 +295,15 @@ int main() {
     my_printf("\n[5/7] Executing NPU Layer 4 (Conv4: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM = (16 << 16) | 16;       
-    NPU_REG_CFG_QUANT   = (L4_SHIFT << 16) | L4_MULT; 
+    NPU_REG_CFG_QUANT   = (64 << 24) | (1 << 22) | (1 << 21) | (L4_SHIFT << 16) | L4_MULT; 
     NPU_REG_CFG_DPATH   = (64 << 22) | (0 << 18) | (9 << 10) | (18 << 4) | 15; 
-    NPU_REG_CFG_DPATH2  = (32 << 16) | (0x00FF);
+    NPU_REG_CFG_DPATH2  = (0 << 16) | (0xFFFF);
     // Row_words = 16*(15+1) = 256; Weight_words = 144 * 32 = 4608
-    NPU_REG_CFG_CH      = (256 << 16) | 4608;
+    NPU_REG_CFG_CH      = (256 << 16) | 9216;
     
     NPU_REG_ACT_BASE    = (uint32_t)buf_conv3;
 
-    for (int pass = 0; pass < 2; pass++) {
+    for (int pass = 0; pass < 1; pass++) {
         NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 128);
         NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 18432);
         NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 32);

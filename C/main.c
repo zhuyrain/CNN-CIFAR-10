@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 // ==========================================
-// 1. NPU AXI-Lite 寄存器映射宏定义
+// 1. NPU AXI-Lite 寄存器映射宏定义 (已对齐全新重构版本)
 // ==========================================
 #define NPU_BASE            0x40000000
 #define NPU_REG_CTRL_STATUS (*(volatile uint32_t*)(NPU_BASE + 0x00))
@@ -13,13 +13,14 @@
 #define NPU_REG_WEIGHT_BASE (*(volatile uint32_t*)(NPU_BASE + 0x08))
 #define NPU_REG_BIAS_BASE   (*(volatile uint32_t*)(NPU_BASE + 0x0C))
 #define NPU_REG_OUT_BASE    (*(volatile uint32_t*)(NPU_BASE + 0x10))
-#define NPU_REG_CFG_IMG_DIM (*(volatile uint32_t*)(NPU_BASE + 0x14))
-#define NPU_REG_CFG_CH      (*(volatile uint32_t*)(NPU_BASE + 0x18))
-#define NPU_REG_CFG_QUANT   (*(volatile uint32_t*)(NPU_BASE + 0x1C))
-#define NPU_REG_CFG_DPATH   (*(volatile uint32_t*)(NPU_BASE + 0x20))
-#define NPU_REG_CFG_DPATH2  (*(volatile uint32_t*)(NPU_BASE + 0x24))
-#define NPU_REG_CFG_KERNEL  (*(volatile uint32_t*)(NPU_BASE + 0x28))
 
+// 全新重构的 6 个配置寄存器
+#define NPU_REG_CFG_IMG_DIM  (*(volatile uint32_t*)(NPU_BASE + 0x14))
+#define NPU_REG_CFG_MEM_CNT  (*(volatile uint32_t*)(NPU_BASE + 0x18))
+#define NPU_REG_CFG_DATAPATH (*(volatile uint32_t*)(NPU_BASE + 0x1C))
+#define NPU_REG_CFG_SPATIAL  (*(volatile uint32_t*)(NPU_BASE + 0x20))
+#define NPU_REG_CFG_QUANT    (*(volatile uint32_t*)(NPU_BASE + 0x24))
+#define NPU_REG_CFG_POST     (*(volatile uint32_t*)(NPU_BASE + 0x28))
 // 声明汇编中的自定义函数
 extern void enable_npu_irq(uint32_t mask);
 extern void wait_for_irq(void);
@@ -79,20 +80,39 @@ int main() {
     my_printf("===== RISC-V & NPU 64x64 FULL POWER Inference =====\n");
 
     // -----------------------------------------------------------
-    // Layer 1: Hardware Conv1 (32x32x3 -> 32x32x64)
+    // Layer 1: Hardware Conv1 (32x32x3 -> 32x32x64) 转换为 FC 配置
     // -----------------------------------------------------------
     my_printf("[1/7] Executing FC Layer 1 (Conv1: 64 OC)...\n");
 
-    NPU_REG_CFG_IMG_DIM = (1 << 16) | 64;       
-    NPU_REG_CFG_QUANT   = (12 << 24) | (0 << 21) | (FC_SHIFT << 16) | FC_MULT; 
-    // Out_Stride=64, IC_G_R=0(空间全并行!), W_Num=9, LB_W=34, IC_G=15
-    NPU_REG_CFG_DPATH   = (12 << 22) | (0 << 18) | (64 << 10) | (0 << 4) | 15;
-    NPU_REG_CFG_DPATH2  = (0 << 16) | (0xFFFF);
+    // 1. 外部维度与搬运计数
+    // [31:16] H=1, [15:0] W=64
+    NPU_REG_CFG_IMG_DIM  = (4 << 16) | 16;      
+    // [31:16] row_word_count=1024, [15:0] weight_word_count=12288
+    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 12288;
 
-    NPU_REG_CFG_KERNEL  = (1 << 5) | (0 << 4) |(0 << 2) | 0;
-    // Row_words = 32*(0+1) = 32; Weight_words = 144 * 4(OC) = 576
-    NPU_REG_CFG_CH      = (1024 << 16) | 12288;
+    // 2. 数据通路与片上缓存参数
+    // [31:23] out_stride=12, [22:19] lb_ic_groups_r=0, [18:11] sa_weight_num=64, [10:4] lb_line_width=64, [3:0] lb_ic_groups=15
+    NPU_REG_CFG_DATAPATH = (12 << 23) | (0 << 19) | (64 << 11) | (16 << 4) | 15;
+
+    // 3. 阵列空间映射与滑窗边界
+    // [31:24] oc_num=12, [23:8] col_group_en=0xFFFF, [5] ky_skew=1, [4] pad_size=0, [3:2] kx_max=0, [1:0] ky_max=0
+    NPU_REG_CFG_SPATIAL  = (12 << 24) | (0x0007 << 8) | (1 << 5) | (0 << 4) | (0 << 2) | 0;
+
+    // 4. 量化数学参数
+    // [31:16] out_zp=0, [15:0] multiplier=FC_MULT
+    NPU_REG_CFG_QUANT    = (0 << 16) | FC_MULT;
+
+    // 5. 后处理与系统级流水线安全控制 (新增亮点!)
+    // [31:22] drain_timeout: 强制排空等待拍数 (64行+64列+4保险 = 132)
+    // [21:12] fifo_af_thresh: FIFO 将满阈值 (假设你的 FIFO 深度是 1024，设为 1000 留出 24 拍飞行裕量)
+    // [5:1] shift=FC_SHIFT, [0] relu_en=0
+    uint32_t drain_timeout  = 132;   
+    uint32_t fifo_af_thresh = 40; 
+    NPU_REG_CFG_POST = (drain_timeout << 22) | (fifo_af_thresh << 12) | (FC_SHIFT << 1) | 0;
     
+    // -----------------------------------------------------------
+    // 启动运算与基地址配置
+    // -----------------------------------------------------------
     NPU_REG_ACT_BASE    = (uint32_t)expected_pool2_output;
 
     // ===========================================================

@@ -359,13 +359,13 @@ int main() {
 
     // 1. 外部维度与搬运计数
     // [31:16] H=1, [15:0] W=64
-    NPU_REG_CFG_IMG_DIM  = (4 << 16) | 16;      
+    NPU_REG_CFG_IMG_DIM  = (1 << 16) | 64;      
     // [31:16] row_word_count=1024, [15:0] weight_word_count=12288
-    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 12288;
+    NPU_REG_CFG_MEM_CNT  = (1024 << 16) | 12288;
 
     // 2. 数据通路与片上缓存参数
     // [31:23] out_stride=12, [22:19] lb_ic_groups_r=0, [18:11] sa_weight_num=64, [10:4] lb_line_width=64, [3:0] lb_ic_groups=15
-    NPU_REG_CFG_DATAPATH = (12 << 23) | (0 << 19) | (64 << 11) | (16 << 4) | 15;
+    NPU_REG_CFG_DATAPATH = (12 << 23) | (0 << 19) | (64 << 11) | (64 << 4) | 15;
 
     // 3. 阵列空间映射与滑窗边界
     // [31:24] oc_num=12, [23:8] col_group_en=0xFFFF, [5] ky_skew=1, [4] pad_size=0, [3:2] kx_max=0, [1:0] ky_max=0

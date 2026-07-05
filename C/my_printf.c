@@ -2,12 +2,20 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-// 定义一个指向外部仿真器假串口地址的挥发性指针
-volatile uint32_t * const UART_TX = (uint32_t *)0x001FFFF0;
+// 定义硬件寄存器绝对物理地址
+#define AXI_UARTLITE_BASE 0x80000000
+#define UART_TX_FIFO      (*(volatile uint32_t*)(AXI_UARTLITE_BASE + 0x04))
+#define UART_STATUS       (*(volatile uint32_t*)(AXI_UARTLITE_BASE + 0x08))
 
-// 自定义的最简打印函数
 void my_putc(char c) {
-    *UART_TX = c; // 往这个地址写数据，Testbench 就会在终端打印出来
+    // 【核心防丢包逻辑】：轮询状态寄存器的 Bit 3
+    // 如果 TX FIFO 是满的 (UART_STATUS & 0x08 为真)，CPU 就死循环死等！
+    while (UART_STATUS & (1 << 3)) {
+        // do nothing, just wait...
+    }
+    
+    // 等到 FIFO 有空位了，再把字符塞进去
+    UART_TX_FIFO = (uint32_t)c;
 }
 
 // 封装一个裸机版的 my_printf (支持 %d, %s, %c, %x, %X 以及 %08x 等前导零补齐)

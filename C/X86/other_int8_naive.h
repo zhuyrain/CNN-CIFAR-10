@@ -2,6 +2,7 @@
 #define OTHER_INT8_NAIVE_X86_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 void relu_int8(int8_t* data, int size);
 void maxpool2d_int8(

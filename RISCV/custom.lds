@@ -1,10 +1,10 @@
 /* 将入口点设置为我们汇编里的 _start 标签 */
 ENTRY(_start)
 
-/* 定义物理内存布局 (起始于 0x0 的 2MB SRAM) */
-/*适配FPGA SRAM 只有 128KB */
+/* 定义物理内存布局 (起始于 0x0 的 1MB SRAM) */
+/* SRAM 为 1MB */
 MEMORY {
-    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 128K
+    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 1024K
 }
 
 SECTIONS
@@ -46,7 +46,7 @@ SECTIONS
         _bss_end = .;
     } > SRAM
 
-    /* 将栈顶定义在 128KB SRAM 的最末端 */
+    /* 将栈顶定义在 1MB SRAM 的最末端 */
     /* 这个符号 (_sp) 会被 start.S 使用 */
     _sp = ORIGIN(SRAM) + LENGTH(SRAM);
 }

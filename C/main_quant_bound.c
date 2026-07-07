@@ -125,12 +125,13 @@ int main() {
     my_printf("========================================\n");
     if (pass) {
         my_printf(" QUANTIZATION & DATAPATH BOUNDARIES PASSED!\n");
+        my_printf("========================================\n");
+        SIM_EXIT_PORT = 1;
     } else {
         my_printf(" QUANTIZATION VERIFICATION FAILED!\n");
-        while(1); 
+        my_printf("========================================\n");
+        SIM_EXIT_PORT = 0;
     }
-    my_printf("========================================\n");
-
     while(1);
     return 0;
 }

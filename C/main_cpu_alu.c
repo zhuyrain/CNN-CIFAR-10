@@ -4,20 +4,7 @@
 // ==========================================
 // 1. NPU AXI-Lite 寄存器映射宏定义 (已对齐全新重构版本)
 // ==========================================
-#define NPU_BASE            0x40000000
-#define NPU_REG_CTRL_STATUS (*(volatile uint32_t*)(NPU_BASE + 0x00))
-#define NPU_REG_ACT_BASE    (*(volatile uint32_t*)(NPU_BASE + 0x04))
-#define NPU_REG_WEIGHT_BASE (*(volatile uint32_t*)(NPU_BASE + 0x08))
-#define NPU_REG_BIAS_BASE   (*(volatile uint32_t*)(NPU_BASE + 0x0C))
-#define NPU_REG_OUT_BASE    (*(volatile uint32_t*)(NPU_BASE + 0x10))
-
-// 全新重构的 6 个配置寄存器
-#define NPU_REG_CFG_IMG_DIM  (*(volatile uint32_t*)(NPU_BASE + 0x14))
-#define NPU_REG_CFG_MEM_CNT  (*(volatile uint32_t*)(NPU_BASE + 0x18))
-#define NPU_REG_CFG_DATAPATH (*(volatile uint32_t*)(NPU_BASE + 0x1C))
-#define NPU_REG_CFG_SPATIAL  (*(volatile uint32_t*)(NPU_BASE + 0x20))
-#define NPU_REG_CFG_QUANT    (*(volatile uint32_t*)(NPU_BASE + 0x24))
-#define NPU_REG_CFG_POST     (*(volatile uint32_t*)(NPU_BASE + 0x28))
+#include "npu.h"
 
 // =========================================================================
 // 1. CPU ALU & 分支预测原子测试
@@ -118,6 +105,7 @@ int main() {
         my_printf("   [PASS] ALU & Branching OK.\n");
     } else {
         my_printf("   [FAIL] ALU Hardware Error!\n");
+        SIM_EXIT_PORT = 0;
         while(1); // 测试失败，死循环挂起
     }
 
@@ -126,13 +114,14 @@ int main() {
         my_printf("   [PASS] SRAM Read/Write OK.\n");
     } else {
         my_printf("   [FAIL] SRAM Data Corruption!\n");
+        SIM_EXIT_PORT = 0;
         while(1); 
     }
 
     my_printf("========================================\n");
     my_printf(" ALL INFRASTRUCTURE TESTS PASSED!\n");
     my_printf("========================================\n");
-
+    SIM_EXIT_PORT = 1;
     // 成功结束，进入休眠或死循环等待仿真工具截获结束信号
     while(1);
     return 0;

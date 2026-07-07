@@ -110,9 +110,10 @@ int main() {
         my_printf("========================================\n");
         my_printf(" SYSTEM IRQ ROBUSTNESS PASSED!\n");
         my_printf("========================================\n");
+        SIM_EXIT_PORT = 1;
     } else {
         my_printf("  [FAIL] IRQ Count: %d | Data Errors: %d\n", total_irq_count, error_cnt);
-        while(1);
+        SIM_EXIT_PORT = 0;
     }
 
     while(1);

@@ -171,9 +171,10 @@ int main() {
         my_printf("========================================\n");
         my_printf(" FPGA HARDWARE DEPLOYMENT READY!\n");
         my_printf("========================================\n");
+        SIM_EXIT_PORT = 1;
     } else {
         my_printf("\n  [FAIL] Network inference failed with %d errors.\n", error_cnt);
-        while(1);
+        SIM_EXIT_PORT = 0;
     }
 
     while(1);

@@ -97,13 +97,14 @@ int main() {
         my_printf("   [PASS] AXI Config Read/Write Match!\n");
     } else {
         my_printf("   [FAIL] AXI Config Data Mismatch!\n");
-        while(1); // 触发总线错误，死循环挂起，方便抓取波形定位
+        SIM_EXIT_PORT = 0;
+        while(1);
     }
 
     my_printf("========================================\n");
     my_printf(" ALL AXI CONFIG TESTS PASSED!\n");
     my_printf("========================================\n");
-
+    SIM_EXIT_PORT = 1;
     // 测试结束挂起
     while(1);
     return 0;

@@ -134,7 +134,7 @@ int main() {
     // -----------------------------------------------------------
     // [7/7] Layer 7: Hardware FC Layer (Folded Reshape Map)
     // -----------------------------------------------------------
-    my_printf(" -> [7/7] Executing NPU FC Layer (1x64 Reshape)...\n");
+    my_printf(" -> [7/7] Executing NPU FC Layer (2x32 Reshape)...\n");
     NPU_REG_CFG_IMG_DIM  = (2 << 16) | 32;      
     NPU_REG_CFG_MEM_CNT  = (512 << 16) | 12288;
     NPU_REG_CFG_DATAPATH = (12 << 23) | (0 << 19) | (64 << 11) | (32 << 4) | 15;
@@ -175,9 +175,10 @@ int main() {
         my_printf("========================================\n");
         my_printf(" FULL SYSTEM INTEGRATION PASSED!\n");
         my_printf("========================================\n");
+        SIM_EXIT_PORT = 1;
     } else {
         my_printf("\n  [FAIL] Network inference failed with %d errors.\n", error_cnt);
-        while(1);
+        SIM_EXIT_PORT = 0;
     }
 
     while(1);

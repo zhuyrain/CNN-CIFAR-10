@@ -12,7 +12,7 @@ CASE ?= test
 # 跨平台环境检测与命令包装 (彻底解决 Windows/Linux 兼容性)
 # ==========================================
 ifeq ($(OS),Windows_NT)
-    # Windows 环境 (cmd.exe)
+    # Windows 环境 (回滚至最稳定的原生 cmd /c 调用)
     RM      = cmd /c del /Q /F
     RMDIR   = cmd /c rmdir /Q /S
     CP      = cmd /c copy /Y
@@ -88,8 +88,8 @@ $(TARGET_BYTE_HEX): $(TARGET_HEX)
 # ==========================================
 # 6. 回归测试自动化 (Regression Test Batch)
 # ==========================================
-# 这里填写你所有的测试用例后缀名
-REGRESS_CASES = cpu_alu axi_cfg axi_burst_edge math_ones dim_stretch fc_reshape conv_1x1 quant_bound irq_storm vgg_full
+# 修正为你现有的 11 个核心测试用例
+REGRESS_CASES = cpu_alu axi_cfg axi_burst_edge math_ones dim_stretch fc_reshape conv_1x1 bus_stress quant_bound irq_storm vgg_full reg_bounds
 
 # 使用 Make 的依赖推导机制，避免在不同系统的 Shell 下写 for 循环
 REGRESS_TARGETS = $(addprefix regress_, $(REGRESS_CASES))
@@ -106,12 +106,13 @@ regress: $(REGRESS_TARGETS)
 regress_%:
 	@$(MAKE) CASE=$*
 	@$(call MKDIR, $(REGRESS_DIR))
-	@$(CP) $(call FixPath, $(FW_DIR)/$*/firmware_byte_$*.hex) $(call FixPath, $(REGRESS_DIR)/) >nul 2>&1 || true
+	-@$(CP) $(call FixPath, $(FW_DIR)/$*/firmware_byte_$*.hex) $(call FixPath, $(REGRESS_DIR)/)
 
 # ==========================================
 # 7. 清理规则
 # ==========================================
+# 【还原原始删除逻辑】：去除了导致 PowerShell 卡死的 >nul，保留最稳定的 cmd /c rmdir
 clean:
 	@echo "Cleaning firmware directory..."
-	@$(RMDIR) $(call FixPath, $(FW_DIR))
+	-@$(RMDIR) $(call FixPath, $(FW_DIR))
 	@echo "Clean completed."

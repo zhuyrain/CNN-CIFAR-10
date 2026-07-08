@@ -43,15 +43,15 @@ int main() {
     my_printf("========================================\n");
 
     // -----------------------------------------------------------
-    // 核心魔法：动态计算 4KB 恶意边界地址
+    // 动态计算 4KB 跨页边界地址
     // -----------------------------------------------------------
-    // 1. 偏置 (Bias) 恶意地址
+    // 1. 偏置 (Bias) 跨页地址
     uint32_t raw_bias_addr = (uint32_t)raw_bias_buf;
     uint32_t boundary_4k_bias = (raw_bias_addr + 0x0FFF) & ~(0x0FFF);
-    // 退后 8 个字节 (2个Word)。由于 FC Bias 长 12 字节，这必将导致跨页！
+    // 退后 8 个字节 (2个Word)。由于 FC Bias 长 12 字节，将导致跨页传输
     uint32_t evil_bias_addr = boundary_4k_bias - 8; 
 
-    // 2. 输出 (Output) 恶意地址
+    // 2. 输出 (Output) 跨页地址
     uint32_t raw_out_addr = (uint32_t)raw_out_buf;
     uint32_t boundary_4k_out = (raw_out_addr + 0x0FFF) & ~(0x0FFF);
     uint32_t evil_out_addr = boundary_4k_out - 8;
@@ -91,7 +91,7 @@ int main() {
     NPU_REG_ACT_BASE    = (uint32_t)expected_pool2_output;
     NPU_REG_WEIGHT_BASE = (uint32_t)test_fc_weight;
     
-    // 配置我们精心准备的跨页地址！
+    // 配置跨页地址
     NPU_REG_BIAS_BASE   = evil_bias_addr;
     NPU_REG_OUT_BASE    = evil_out_addr;
 

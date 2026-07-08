@@ -9,10 +9,10 @@ endif
 CASE ?= test
 
 # ==========================================
-# 跨平台环境检测与命令包装 (彻底解决 Windows/Linux 兼容性)
+# 跨平台环境检测与命令包装 (Windows/Linux 兼容性)
 # ==========================================
 ifeq ($(OS),Windows_NT)
-    # Windows 环境 (回滚至最稳定的原生 cmd /c 调用)
+    # Windows 环境 (使用原生 cmd /c 调用)
     RM      = cmd /c del /Q /F
     RMDIR   = cmd /c rmdir /Q /S
     CP      = cmd /c copy /Y
@@ -33,7 +33,7 @@ CC      = $(PREFIX)gcc
 OBJCOPY = $(PREFIX)objcopy
 PY      = python
 
-# 2. 文件夹路径规划 (完美文件隔离)
+# 2. 文件夹路径规划
 C_DIR       = C
 RV_DIR      = RISCV
 PYTHON_DIR  = python
@@ -88,7 +88,7 @@ $(TARGET_BYTE_HEX): $(TARGET_HEX)
 # ==========================================
 # 6. 回归测试自动化 (Regression Test Batch)
 # ==========================================
-# 修正为你现有的 11 个核心测试用例
+# 修正为现有的 12 个核心测试用例
 REGRESS_CASES = cpu_alu axi_cfg axi_burst_edge math_ones dim_stretch fc_reshape conv_1x1 bus_stress quant_bound irq_storm vgg_full reg_bounds
 
 # 使用 Make 的依赖推导机制，避免在不同系统的 Shell 下写 for 循环
@@ -102,7 +102,7 @@ regress: $(REGRESS_TARGETS)
 	@echo " -> $(REGRESS_DIR)"
 	@echo "========================================"
 
-# 模式匹配规则：针对每个回归用例执行编译，并将终极 _byte.hex 复制到 regress 目录
+# 模式匹配规则：针对每个回归用例执行编译，并将 _byte.hex 复制到 regress 目录
 regress_%:
 	@$(MAKE) CASE=$*
 	@$(call MKDIR, $(REGRESS_DIR))
@@ -111,7 +111,7 @@ regress_%:
 # ==========================================
 # 7. 清理规则
 # ==========================================
-# 【还原原始删除逻辑】：去除了导致 PowerShell 卡死的 >nul，保留最稳定的 cmd /c rmdir
+# 删除规则：通过 cmd /c rmdir 清理 firmware 目录
 clean:
 	@echo "Cleaning firmware directory..."
 	-@$(RMDIR) $(call FixPath, $(FW_DIR))

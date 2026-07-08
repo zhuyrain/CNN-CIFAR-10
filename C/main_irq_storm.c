@@ -15,9 +15,8 @@ void npu_isr(void) {
     npu_task_finished = 1;
     total_irq_count++;
     
-    // 【生死攸关的硬件清除】
-    // 必须在 ISR 中极其迅速地清掉硬件的中断 Flag，
-    // 否则一退出 ISR 就会被挂在电平上的 IRQ 信号再次拉回来，导致死机。
+    // 必须在 ISR 中快速清除硬件中断标志，
+    // 否则退出 ISR 后电平未撤销的 IRQ 信号会立即再次触发中断。
     NPU_REG_CTRL_STATUS = 0x00000004; 
 }
 
@@ -29,7 +28,7 @@ void wait_npu_done() {
 }
 
 // ==========================================
-// 极小张量 (H=4, W=4, IC=4, OC=4) - 为了让计算极速结束
+// 极小张量 (H=4, W=4, IC=4, OC=4) - 为了让计算迅速结束
 // ==========================================
 #define H 4
 #define W 4
@@ -76,16 +75,16 @@ int main() {
 
     int target_runs = 1000;
     
-    // 核心风暴循环
+    // 核心循环
     for (int i = 1; i <= target_runs; i++) {
         
         // 1. 瞬间点火
         NPU_REG_CTRL_STATUS = 0x00000001; 
         
-        // 2. CPU 立即休眠，交出总线和功耗，等待被 NPU 一脚踹醒
+        // 2. CPU 进入休眠等待模式，交出总线控制权，等待 NPU 中断唤醒
         wait_npu_done();
         
-        // 3. 打印进度 (每 100 次打印一次，防止 UART 打印太慢拖累了风暴的节奏)
+        // 3. 打印进度 (每 100 次打印一次，防止 UART 打印太慢拖累整体节奏)
         if (i % 100 == 0) {
             my_printf("    [INFO] Handled %d / %d IRQs flawlessly...\n", i, target_runs);
         }

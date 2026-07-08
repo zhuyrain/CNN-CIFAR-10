@@ -45,7 +45,7 @@ void conv2d_int8_naive(
             // 3. 遍历输出特征图的 X 坐标
             for (int ox = 0; ox < out_size; ox++) {
                 
-                // 【关键点 1：累加器必须是 32 位整数！】
+                // 关键点 1：累加器必须使用 32 位整数
                 // 即使输入和权重都是 8 位，多次乘加后极易溢出 16 位
                 int32_t acc = bias[oc]; 
 
@@ -75,8 +75,8 @@ void conv2d_int8_naive(
                     }
                 }
 
-                // 【关键点 2：重量化 (Re-quantization)】
-                // 将 INT32 的累加结果，缩放并平移回 INT8，供下一层使用
+                // 关键点 2：重量化 (Re-quantization)
+                // 将 INT32 的累加结果缩放并平移回 INT8，供下一层使用
                 // 在没有 FPU 的微处理器上，(acc * scale) 通常转化为 (acc * multiplier) >> shift
                 int32_t scaled_acc = (acc * multiplier) >> shift;
                 int32_t requantized = scaled_acc + out_zp;
@@ -107,8 +107,8 @@ void relu_int8(int8_t* data, int size) {
 }
 
 /**
- * @brief 2D 最大池化算子 (INT8) - HWC (通道交织) 专用版！
- * 完美匹配 NPU 写回的 AXI 连续数据包格式
+ * @brief 2D 最大池化算子 (INT8) - HWC (通道交织) 专用版
+ * 匹配 NPU 写回的 AXI 连续数据包格式
  */
 void maxpool2d_int8_hwc(
     const int8_t* input, int8_t* output, 
@@ -128,7 +128,7 @@ void maxpool2d_int8_hwc(
                         int in_y = out_y * stride + py;
                         int in_x = out_x * stride + px;
                         
-                        // 【核心修改：HWC 一维数组绝对寻址公式！】
+                        // 核心修改：HWC 一维数组绝对寻址公式
                         // Index = (Y * W * C) + (X * C) + C
                         int in_idx = (in_y * in_size * channels) + (in_x * channels) + c;
                         
@@ -176,7 +176,7 @@ void linear_int8_hwc(
                     // Index = h * (W * C) + w * C + c
                     int hwc_idx = h * (in_w * in_c) + w * in_c + c;
                     
-                    // 动态坐标对齐乘加！
+                    // 动态坐标对齐乘加
                     acc += (int32_t)input_hwc[hwc_idx] * (int32_t)weight_chw[weight_row_offset + chw_idx];
                 }
             }

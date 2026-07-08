@@ -21,7 +21,7 @@ void wait_npu_done() {
 }
 
 // ==========================================
-// 极限边界张量配置
+// 边界条件张量配置
 // ==========================================
 #define IC 64
 #define LOGICAL_OC 4
@@ -33,7 +33,7 @@ int8_t  weight_buf[1024] __attribute__((aligned(64)));
 int32_t bias_buf[64]     __attribute__((aligned(64)));
 int8_t  out_buf[64]      __attribute__((aligned(64)));
 
-// 核心测试引擎
+// 测试函数
 int run_quant_test(const char* test_name, 
                    int8_t act_val, int8_t weight_val, int32_t bias_val, 
                    int32_t mult, int shift, int8_t expected) 
@@ -51,7 +51,7 @@ int run_quant_test(const char* test_name,
     for (int i = 0; i < HW_OC; i++) p_out[i] = 0;
 
     // =======================================================
-    // 【架构师防弹补丁：内存屏障 (Memory Barrier)】
+    // 【内存屏障 (Memory Barrier)】
     // 通过 CPU 强制读取刚刚写入的内存，强迫 AXI Interconnect
     // 清空内部的 Write Buffer，确保所有数据真正落入 SRAM。
     // =======================================================
@@ -89,7 +89,7 @@ int run_quant_test(const char* test_name,
     NPU_REG_CTRL_STATUS = 0x00000001; // CPU 启动 NPU
     wait_npu_done(); // 等待 NPU 计算完成
 
-    // 5. 严苛自检
+    // 5. 自检
     int error_cnt = 0;
     for (int c = 0; c < LOGICAL_OC; c++) {
         if (p_out[c] != expected) {

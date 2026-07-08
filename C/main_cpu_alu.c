@@ -70,7 +70,7 @@ int test_sram_integrity() {
         }
     }
 
-    return 1; // 内存完整性完美
+    return 1; // 内存完整性通过
 }
 
 // 声明汇编中的自定义函数
@@ -88,7 +88,6 @@ void npu_isr(void) {
     npu_task_finished = 1;
 
     // 2. 硬件标志位清零 (向 Bit 2 写 1 清除 DONE 标志)
-    // 极其关键：必须在这里清硬件标志，否则 irq 引脚一直拉高会导致无限触发中断！
     NPU_REG_CTRL_STATUS = 0x00000004; 
 }
 

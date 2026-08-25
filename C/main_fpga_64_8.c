@@ -91,7 +91,7 @@ int main() {
     // [31:16] H=32, [15:0] W=32
     NPU_REG_CFG_IMG_DIM  = (32 << 16) | 32;      
     // [31:16] row_word_count=32, [15:0] weight_word_count=576
-    NPU_REG_CFG_MEM_CNT  = (32 << 16) | 576;
+    NPU_REG_CFG_MEM_CNT  = (32 << 16) | 72;
     // [31:23] out_stride=64, [22:19] lb_ic_groups_r=0, [18:11] sa_weight_num=9, [10:4] lb_line_width=34, [3:0] lb_ic_groups=0
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (34 << 4) | 0;
     // [31:24] oc_num=64, [23:8] col_group_en=0xFFFF, [5] ky_skew=0, [4] pad_size=1, [3:2] kx_max=2, [1:0] ky_max=2 (标准3x3参数)
@@ -104,10 +104,10 @@ int main() {
     NPU_REG_ACT_BASE     = (uint32_t)test_input_img;
 
     // 启动 NPU 计算
-    for (int pass = 0; pass < 1; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 4 * 64);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 2304);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 64);
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 4 * 8);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 288);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 8);
 
         NPU_REG_CTRL_STATUS = 0x00000001;
         // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
@@ -157,22 +157,22 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM  = (32 << 16) | 32;      
     // Row_words = 32*(15+1) = 512; Weight_words = 144 * 32(OC) = 4608 (假设分次计算的参数)
-    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 1152;
     // out_stride=64, lb_ic_groups_r=0, sa_weight_num=9, lb_line_width=34, lb_ic_groups=15
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (34 << 4) | 15;
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L2_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L2_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_conv1;
     // 启动 NPU 计算 (仅需 1 个 Pass)
-    for (int pass = 0; pass < 1; pass++) {
+    for (int pass = 0; pass < 8; pass++) {
         // 每次偏移 64 个 Bias (64 * 4 bytes = 256 bytes)
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 256);
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 32);
         // 每次偏移 9216 个 Word 权重 (9216 * 4 bytes = 36864 bytes)
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 36864);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 4608);
         // 每次偏移 32 个 Output Channel (32 * 1 byte = 32 bytes)
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 64);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 8);
 
         NPU_REG_CTRL_STATUS = 0x00000001;
         wait_npu_done();
@@ -253,19 +253,19 @@ int main() {
 
     NPU_REG_CFG_IMG_DIM  = (16 << 16) | 16;      
     // Row_words = 16*(15+1) = 256; Weight_words = 144 * 32 = 4608
-    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 1152;
     // out_stride=64, lb_ic_groups_r=0, sa_weight_num=9, lb_line_width=18, lb_ic_groups=15
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (18 << 4) | 15; 
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L3_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L3_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_pool1;
 
-    for (int pass = 0; pass < 1; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 128);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 18432);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 32);
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 32);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 4608);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 8);
 
         NPU_REG_CTRL_STATUS = 0x00000001;
         wait_npu_done();
@@ -303,18 +303,18 @@ int main() {
     my_printf("\n[5/7] Executing NPU Layer 4 (Conv4: 64 OC, 64 IC)...\n");
 
     NPU_REG_CFG_IMG_DIM  = (16 << 16) | 16;      
-    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 1152;
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (18 << 4) | 15; 
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L4_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L4_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_conv3;
 
-    for (int pass = 0; pass < 1; pass++) {
-        NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 128);
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 18432);
-        NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 32);
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 32);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 4608);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 8);
 
         NPU_REG_CTRL_STATUS = 0x00000001;
         wait_npu_done();

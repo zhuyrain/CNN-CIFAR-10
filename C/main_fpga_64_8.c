@@ -32,7 +32,7 @@ int8_t buf_pool1[64 * 16 * 16] __attribute__((aligned(4))) = {0};
 int8_t buf_conv3[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
 int8_t buf_conv4[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
 int8_t buf_pool2[64 * 8 * 8] __attribute__((aligned(4))) = {0}; 
-int8_t buf_fc[16]              __attribute__((aligned(4))) = {0};
+int8_t buf_fc[10]              __attribute__((aligned(4))) = {0};
 
 int main() {
     // 开启中断
@@ -159,41 +159,13 @@ int main() {
     maxpool2d_int8_hwc(buf_conv4, buf_pool2, 64, 16, 2, 2);
 
     // -----------------------------------------------------------
-    // [7/7] Layer 7: Hardware FC Layer (2x32 Reshape, 8 OC Slicing)
+    // [7/7] Layer 7: Software FC Layer
     // -----------------------------------------------------------
-    my_printf(" -> [7/7] Executing NPU FC Layer (2x32 Reshape, 2 Passes of 8 OC)...\n");
-    NPU_REG_CFG_IMG_DIM  = (2 << 16) | 32;      
-    
-    // 【修改点 1】: weight_word_count 从 12288 改为 8192 (即 512 * 2_rows * 8_cols)
-    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 8192;
-    
-    // 【修改点 2】: out_stride 从 12 改为 8
-    NPU_REG_CFG_DATAPATH = (8 << 23) | (0 << 19) | (64 << 11) | (32 << 4) | 15;
-    
-    // 【修改点 3】: oc_num 设为 8 (8 << 24) 且 col_group_en 设为 0x0003 (仅激活物理阵列前 8 列)
-    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0x0003 << 8) | (1 << 5) | (0 << 4) | (0 << 2) | 0;
-    
-    NPU_REG_CFG_QUANT    = (0 << 16) | FC_MULT;
-    NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (FC_SHIFT << 1) | 0;
-    
-    NPU_REG_ACT_BASE     = (uint32_t)buf_pool2;
-    // 启动 NPU 计算 (分 2 次 Pass 完成 16 OC，其中前 10 个为有效分类结果)
-    for (int pass = 0; pass < 2; pass++) {  
-        // 每次偏移 8 个 Bias (8 OC * 4 Bytes = 32 字节)
-        NPU_REG_BIAS_BASE   = (uint32_t)test_fc_bias + (pass * 32);
-        
-        // 每次偏移 8192 个 Word 权重 (8192 * 4 Bytes = 32768 字节)
-        NPU_REG_WEIGHT_BASE = (uint32_t)test_fc_weight + (pass * 32768);
-        
-        // 每次偏移 8 个 Output 字节
-        NPU_REG_OUT_BASE    = (uint32_t)buf_fc + (pass * 8);
-
-        NPU_REG_CTRL_STATUS = 0x00000001;
-        
-        // CPU 进入休眠，等待当前 8 个通道计算完毕
-        wait_npu_done();
-    }
-
+    my_printf(" -> [7/7] CPU Executing FC Layer (NPU PE Capacity Fallback)...\n");
+    linear_int8_hwc(
+        buf_pool2, test_fc_weight, test_fc_bias, buf_fc,
+        64, 8, 8, 10, FC_MULT, FC_SHIFT
+    );
     // ===========================================================
     // 端到端输出比对
     // ===========================================================
@@ -203,7 +175,7 @@ int main() {
     int8_t* ptr_exp_out = (int8_t*)expected_fc_output;
     int error_cnt = 0;
     
-    // 尽管我们算出了 16 个通道的结果，但只校验前 10 个有效 Logit 类别
+    // 校验前 10 个有效 Logit 类别
     for (int ch = 0; ch < 10; ch++) {
         int8_t val = ptr_hw_out[ch];
         int8_t exp = ptr_exp_out[ch];

@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "my_printf.h"
 #include "npu.h"
-#include "../python/test_vector_2.h"
+#include "../python/test_vector_fpga_64_8.h"
 #include "conv2d_int8_naive.h"
 
 // ==========================================

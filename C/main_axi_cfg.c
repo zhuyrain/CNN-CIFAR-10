@@ -17,14 +17,13 @@ void npu_isr(void) {
     npu_task_finished = 1;
 
     // 2. 硬件标志位清零 (向 Bit 2 写 1 清除 DONE 标志)
-    // 极其关键：必须在这里清硬件标志，否则 irq 引脚一直拉高会导致无限触发中断！
     NPU_REG_CTRL_STATUS = 0x00000004; 
 }
 
 // ==========================================
 // 测试逻辑表
 // ==========================================
-// 避开 CTRL_STATUS，我们将 10 个安全寄存器的地址装入数组，方便循环遍历测试
+// 避开 CTRL_STATUS，将 10 个安全寄存器的地址装入数组，方便循环遍历测试
 volatile uint32_t* const cfg_regs[] = {
     &NPU_REG_ACT_BASE,
     &NPU_REG_WEIGHT_BASE,
@@ -82,7 +81,7 @@ int test_axi_cfg_rw() {
         if (*(cfg_regs[i]) != (0x12340000 + i)) return 0;
     }
 
-    return 1; // 4 轮严苛测试全部通过
+    return 1; // 4 轮测试全部通过
 }
 
 int main() {

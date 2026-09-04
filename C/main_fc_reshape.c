@@ -117,7 +117,7 @@ int main() {
     my_printf("-> Testing Reshape Mode 2: H=2, W=32 ...\n");
     pass &= run_fc_reshape_test(2, 32);
 
-    // 测试形态 3：黄金参考形态 (4行 16列)
+    // 测试形态 3：参考形态 (4行 16列)
     my_printf("-> Testing Reshape Mode 3: H=4, W=16 ...\n");
     pass &= run_fc_reshape_test(4, 16);
 

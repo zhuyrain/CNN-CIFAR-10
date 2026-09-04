@@ -109,7 +109,7 @@ int main() {
     // Row_words = 16*(3+1) = 64. Weight_words = 36(w/OC) * 4(OC) = 144.
     NPU_REG_CFG_MEM_CNT  = (64 << 16) | 144;
     
-    // 黄金时间复用折叠：
+    // 时间复用折叠配置：
     // out_stride=32, lb_ic_groups_r=3, sa_weight_num=36(压入144物理极限内!), lb_line_width=18, lb_ic_groups=3
     NPU_REG_CFG_DATAPATH = (32 << 23) | (3 << 19) | (36 << 11) | (18 << 4) | 3;
     
@@ -146,7 +146,7 @@ int main() {
     );
 
     // ===========================================================
-    // 终极审判：端到端输出比对
+    // 端到端输出比对
     // ===========================================================
     my_printf("\n>>> Final Verification: Network Classification Output <<<\n");
     

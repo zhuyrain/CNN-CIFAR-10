@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "my_printf.h"
 #include "npu.h"
-#include "../python/test_vector_2.h"
+#include "../python/test_vector_fpga_64_8.h"
 #include "conv2d_int8_naive.h"
 
 // ==========================================
@@ -23,16 +23,40 @@ void wait_npu_done() {
     my_printf("-");
 }
 
+// 考虑到 VGG-Lite 中 Conv2 需要读 64KB 并同时写 64KB，
+// 我们必须准备两个 64KB 的物理内存池进行 Ping-Pong 交替，
+// 这样可以绝对防止脉动阵列与 DMA 之间的 Read-After-Write (RAW) 数据践踏。
+// 总内存占用从静态的 ~180KB 完美降至 128KB！
+
+// 池 A (64KB): 默认给奇数层作输出缓冲
+int8_t mem_pool_A[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
+// 池 B (64KB): 默认给偶数层作输出缓冲
+int8_t mem_pool_B[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
+
 // ==========================================
-// 内存分配 (继承架构师防弹补丁：64字节强对齐)
+// 零代码修改：宏定义自动 Ping-Pong 路由
 // ==========================================
-int8_t buf_conv1[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv2[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
-int8_t buf_pool1[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv3[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv4[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_pool2[64 * 8 * 8] __attribute__((aligned(4))) = {0}; 
-int8_t buf_fc[12]              __attribute__((aligned(4))) = {0};
+
+// [1/7] Conv1: 3x32x32 -> 64x32x32. 读输入图片，写入 池A
+#define buf_conv1 (mem_pool_A)
+
+// [2/7] Conv2: 64x32x32 -> 64x32x32. 读 池A，写入 池B (双池火力全开)
+#define buf_conv2 (mem_pool_B)
+
+// [3/7] Pool1: 64x32x32 -> 64x16x16. 读 池B，写入 池A 的前 16KB
+#define buf_pool1 (mem_pool_A)
+
+// [4/7] Conv3: 64x16x16 -> 64x16x16. 读 池A，写入 池B 的前 16KB
+#define buf_conv3 (mem_pool_B)
+
+// [5/7] Conv4: 64x16x16 -> 64x16x16. 读 池B，写入 池A 的前 16KB
+#define buf_conv4 (mem_pool_A)
+
+// [6/7] Pool2: 64x16x16 -> 64x8x8. 读 池A，写入 池B 的前 4KB
+#define buf_pool2 (mem_pool_B)
+
+// [7/7] FC: 64x8x8 -> 10. 读 池B，写入 池A 的空闲区域 (安全起见复用在池A起始)
+#define buf_fc    (mem_pool_A)
 
 int main() {
     // 开启中断
@@ -45,43 +69,60 @@ int main() {
     
     // 设置全局的流水线安全控制参数
     uint32_t drain_timeout  = 132;   
-    uint32_t fifo_af_thresh = 300; 
+    uint32_t fifo_af_thresh = 40; 
 
     // -----------------------------------------------------------
     // [1/7] Layer 1: Hardware Conv1 (32x32x3 -> 32x32x64)
     // -----------------------------------------------------------
     my_printf(" -> [1/7] Executing NPU Conv1 (64 OC)...\n");
+    // [31:16] H=32, [15:0] W=32
     NPU_REG_CFG_IMG_DIM  = (32 << 16) | 32;      
-    NPU_REG_CFG_MEM_CNT  = (32 << 16) | 576;
+    // [31:16] row_word_count=32, [15:0] weight_word_count=576
+    NPU_REG_CFG_MEM_CNT  = (32 << 16) | 72;
+    // [31:23] out_stride=64, [22:19] lb_ic_groups_r=0, [18:11] sa_weight_num=9, [10:4] lb_line_width=34, [3:0] lb_ic_groups=0
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (34 << 4) | 0;
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    // [31:24] oc_num=64, [23:8] col_group_en=0xFFFF, [5] ky_skew=0, [4] pad_size=1, [3:2] kx_max=2, [1:0] ky_max=2 (标准3x3参数)
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    // [31:16] out_zp=0, [15:0] multiplier=L1_MULT
     NPU_REG_CFG_QUANT    = (0 << 16) | L1_MULT;
+    // [31:22] drain_timeout, [21:12] fifo_af_thresh, [5:1] shift=L1_SHIFT, [0] relu_en=1
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L1_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)test_input_img;
-    NPU_REG_BIAS_BASE    = (uint32_t)test_conv1_bias;
-    NPU_REG_WEIGHT_BASE  = (uint32_t)test_conv1_weight;
-    NPU_REG_OUT_BASE     = (uint32_t)buf_conv1;
-    NPU_REG_CTRL_STATUS  = 0x00000001;
-    wait_npu_done();
+
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv1_bias + (pass * 4 * 8);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv1_weight + (pass * 288);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv1 + (pass * 8);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // -----------------------------------------------------------
     // [2/7] Layer 2: Hardware Conv2 (32x32x64 -> 32x32x64)
     // -----------------------------------------------------------
     my_printf(" -> [2/7] Executing NPU Conv2 (64 OC)...\n");
     NPU_REG_CFG_IMG_DIM  = (32 << 16) | 32;      
-    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 1152;
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (34 << 4) | 15;
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L2_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L2_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_conv1;
-    NPU_REG_BIAS_BASE    = (uint32_t)test_conv2_bias;
-    NPU_REG_WEIGHT_BASE  = (uint32_t)test_conv2_weight;
-    NPU_REG_OUT_BASE     = (uint32_t)buf_conv2;
-    NPU_REG_CTRL_STATUS  = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv2_bias + (pass * 4 * 8);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv2_weight + (pass * 4608);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv2 + (pass * 8);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // -----------------------------------------------------------
     // [3/7] Layer 3: Software Pool1 (32x32x64 -> 16x16x64)
@@ -94,36 +135,46 @@ int main() {
     // -----------------------------------------------------------
     my_printf(" -> [4/7] Executing NPU Conv3 (64 OC)...\n");
     NPU_REG_CFG_IMG_DIM  = (16 << 16) | 16;      
-    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 1152;
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (18 << 4) | 15; 
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L3_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L3_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_pool1;
-    NPU_REG_BIAS_BASE    = (uint32_t)test_conv3_bias;
-    NPU_REG_WEIGHT_BASE  = (uint32_t)test_conv3_weight;
-    NPU_REG_OUT_BASE     = (uint32_t)buf_conv3;
-    NPU_REG_CTRL_STATUS  = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv3_bias + (pass * 4 * 8);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv3_weight + (pass * 4608);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv3 + (pass * 8);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // -----------------------------------------------------------
     // [5/7] Layer 5: Hardware Conv4 (16x16x64 -> 16x16x64)
     // -----------------------------------------------------------
     my_printf(" -> [5/7] Executing NPU Conv4 (64 OC)...\n");
     NPU_REG_CFG_IMG_DIM  = (16 << 16) | 16;      
-    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 9216;
+    NPU_REG_CFG_MEM_CNT  = (256 << 16) | 1152;
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (9 << 11) | (18 << 4) | 15; 
-    NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
+    NPU_REG_CFG_SPATIAL  = (8 << 24) | (0xFFFF << 8) | (0 << 5) | (1 << 4) | (2 << 2) | 2;
     NPU_REG_CFG_QUANT    = (0 << 16) | L4_MULT;
     NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (L4_SHIFT << 1) | 1;
     
     NPU_REG_ACT_BASE     = (uint32_t)buf_conv3;
-    NPU_REG_BIAS_BASE    = (uint32_t)test_conv4_bias;
-    NPU_REG_WEIGHT_BASE  = (uint32_t)test_conv4_weight;
-    NPU_REG_OUT_BASE     = (uint32_t)buf_conv4;
-    NPU_REG_CTRL_STATUS  = 0x00000001;
-    wait_npu_done();
+    // 启动 NPU 计算
+    for (int pass = 0; pass < 8; pass++) {
+        NPU_REG_BIAS_BASE   = (uint32_t)test_conv4_bias + (pass * 4 * 8);
+        NPU_REG_WEIGHT_BASE = (uint32_t)test_conv4_weight + (pass * 4608);
+        NPU_REG_OUT_BASE    = (uint32_t)buf_conv4 + (pass * 8);
+
+        NPU_REG_CTRL_STATUS = 0x00000001;
+        // CPU 进入休眠，交出控制权，等待硬件中断唤醒！
+        wait_npu_done();
+    }
 
     // -----------------------------------------------------------
     // [6/7] Layer 6: Software Pool2 (16x16x64 -> 8x8x64)
@@ -132,25 +183,15 @@ int main() {
     maxpool2d_int8_hwc(buf_conv4, buf_pool2, 64, 16, 2, 2);
 
     // -----------------------------------------------------------
-    // [7/7] Layer 7: Hardware FC Layer (Folded Reshape Map)
+    // [7/7] Layer 7: Software FC Layer
     // -----------------------------------------------------------
-    my_printf(" -> [7/7] Executing NPU FC Layer (1x64 Reshape)...\n");
-    NPU_REG_CFG_IMG_DIM  = (2 << 16) | 32;      
-    NPU_REG_CFG_MEM_CNT  = (512 << 16) | 12288;
-    NPU_REG_CFG_DATAPATH = (12 << 23) | (0 << 19) | (64 << 11) | (32 << 4) | 15;
-    NPU_REG_CFG_SPATIAL  = (12 << 24) | (0x0007 << 8) | (1 << 5) | (0 << 4) | (0 << 2) | 0;
-    NPU_REG_CFG_QUANT    = (0 << 16) | FC_MULT;
-    NPU_REG_CFG_POST     = (drain_timeout << 22) | (fifo_af_thresh << 12) | (FC_SHIFT << 1) | 0;
-    
-    NPU_REG_ACT_BASE     = (uint32_t)buf_pool2;
-    NPU_REG_BIAS_BASE    = (uint32_t)test_fc_bias;
-    NPU_REG_WEIGHT_BASE  = (uint32_t)test_fc_weight;
-    NPU_REG_OUT_BASE     = (uint32_t)buf_fc;
-    NPU_REG_CTRL_STATUS  = 0x00000001;
-    wait_npu_done();
-
+    my_printf(" -> [7/7] CPU Executing FC Layer (NPU PE Capacity Fallback)...\n");
+    linear_int8_hwc(
+        buf_pool2, test_fc_weight, test_fc_bias, buf_fc,
+        64, 8, 8, 10, FC_MULT, FC_SHIFT
+    );
     // ===========================================================
-    // 终极审判：端到端输出比对
+    // 端到端输出比对
     // ===========================================================
     my_printf("\n>>> Final Verification: Network Classification Output <<<\n");
     
@@ -158,6 +199,7 @@ int main() {
     int8_t* ptr_exp_out = (int8_t*)expected_fc_output;
     int error_cnt = 0;
     
+    // 校验前 10 个有效 Logit 类别
     for (int ch = 0; ch < 10; ch++) {
         int8_t val = ptr_hw_out[ch];
         int8_t exp = ptr_exp_out[ch];

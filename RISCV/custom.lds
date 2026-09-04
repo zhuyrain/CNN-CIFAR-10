@@ -1,10 +1,10 @@
-/* 将入口点设置为我们汇编里的 _start 标签 */
+/* 将入口点设置汇编里的 _start 标签 */
 ENTRY(_start)
 
 /* 定义物理内存布局 (起始于 0x0 的 1MB SRAM) */
 /* SRAM 为 1MB */
 MEMORY {
-    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 1024K
+    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 512K
 }
 
 SECTIONS
@@ -18,7 +18,7 @@ SECTIONS
         *(.text.*)
     } > SRAM
 
-    /* .rodata 段：只读数据 (你的 test_vector.h 里的权重全存在这里！) */
+    /* .rodata 段：只读数据 (test_vector.h 里的权重全存在这里) */
     .rodata :
     {
         . = ALIGN(4);

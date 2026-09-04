@@ -15,7 +15,7 @@ def convert_hex(input_file, output_file):
             continue
         
         if line.startswith('@'):
-            # 捕获 objcopy 吐出的物理基地址，绝对不能丢弃！
+            # 捕获 objcopy 吐出的物理基地址
             current_byte_addr = int(line[1:], 16)
         else:
             tokens = line.split()
@@ -34,7 +34,7 @@ def convert_hex(input_file, output_file):
         for i in range(max_word_addr + 1):
             base = i * 4
             
-            # 如果链接器在这个地址留了空白，.get() 会自动用 '00' 填充 (完美保留 Padding!)
+            # 如果链接器在这个地址留了空白，.get() 会自动用 '00' 填充 (保留 Padding)
             b0 = memory.get(base + 0, '00')
             b1 = memory.get(base + 1, '00')
             b2 = memory.get(base + 2, '00')

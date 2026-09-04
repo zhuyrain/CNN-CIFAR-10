@@ -21,7 +21,7 @@ void wait_npu_done() {
 }
 
 // ==========================================
-// 极限压榨张量配置 (H=32, W=32, IC=4, OC=64)
+// 高吞吐量张量配置 (H=32, W=32, IC=4, OC=64)
 // ==========================================
 #define H 32
 #define W 32
@@ -32,7 +32,6 @@ void wait_npu_done() {
 int8_t act_buf[H * W * IC] __attribute__((aligned(4)));
 
 // 1x1 权重: 1 * (IC/4) * OC = 64 Words = 256 Bytes
-// 因为使用了你的 INT8 4合1 (DP4A) 架构，这里直接用 8-bit 定义，其实占 256 字节
 int8_t weight_1x1[IC * OC] __attribute__((aligned(4)));
 
 // 偏置: 64 个通道 = 256 Bytes
@@ -78,18 +77,18 @@ int main() {
     // out_stride=64, sa_weight_num=1, lb_line_width=32, lb_ic_groups=0
     NPU_REG_CFG_DATAPATH = (64 << 23) | (0 << 19) | (1 << 11) | (32 << 4) | 0;
 
-    // 3. 空间映射 (全速开火！)
+    // 3. 空间映射 (全速运行)
     // oc_num=64, col_group_en=0xFFFF(64列全开), ky_skew=1, pad=0, kx=0, ky=0
     NPU_REG_CFG_SPATIAL  = (64 << 24) | (0xFFFF << 8) | (1 << 5) | (0 << 4) | (0 << 2) | 0;
 
     // 4. 量化参数 (关闭)
     NPU_REG_CFG_QUANT    = (0 << 16) | 1;
     
-    // 5. 【极限施压核心】将 FIFO 将满阈值设为极小值 (如 16)！
-    // 假设 FIFO 深度很大，我们强制它在只装了 16 个 Word 时就拉高 fifo_af 信号，
-    // 疯狂且高频地向前端施加反压！
+    // 5. 反压触发配置：将 FIFO 将满阈值设为极小值
+    // 强制 FIFO 在仅装入 12 个数据项时就拉高 fifo_af 信号，
+    // 以高频向前端施加反压
     uint32_t drain_timeout  = 132;   
-    uint32_t fifo_af_thresh = 40;  // <--- 核心反压诱发点！
+    uint32_t fifo_af_thresh = 12;  // <--- 核心反压诱发点
     NPU_REG_CFG_POST = (drain_timeout << 22) | (fifo_af_thresh << 12) | (0 << 1) | 0;
 
     // 6. 基址配置

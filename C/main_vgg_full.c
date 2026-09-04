@@ -22,17 +22,41 @@ void wait_npu_done() {
     npu_task_finished = 0;
     my_printf("-");
 }
+ 
+// 考虑到 VGG-Lite 中 Conv2 需要读 64KB 并同时写 64KB，
+// 我们必须准备两个 64KB 的物理内存池进行 Ping-Pong 交替，
+// 这样可以绝对防止脉动阵列与 DMA 之间的 Read-After-Write (RAW) 数据践踏。
+// 总内存占用从静态的 ~180KB 完美降至 128KB！
+
+// 池 A (64KB): 默认给奇数层作输出缓冲
+int8_t mem_pool_A[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
+// 池 B (64KB): 默认给偶数层作输出缓冲
+int8_t mem_pool_B[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
 
 // ==========================================
-// 内存分配
+// 零代码修改：宏定义自动 Ping-Pong 路由
 // ==========================================
-int8_t buf_conv1[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv2[64 * 32 * 32] __attribute__((aligned(4))) = {0}; 
-int8_t buf_pool1[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv3[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_conv4[64 * 16 * 16] __attribute__((aligned(4))) = {0}; 
-int8_t buf_pool2[64 * 8 * 8] __attribute__((aligned(4))) = {0}; 
-int8_t buf_fc[12]              __attribute__((aligned(4))) = {0};
+
+// [1/7] Conv1: 3x32x32 -> 64x32x32. 读输入图片，写入 池A
+#define buf_conv1 (mem_pool_A)
+
+// [2/7] Conv2: 64x32x32 -> 64x32x32. 读 池A，写入 池B (双池火力全开)
+#define buf_conv2 (mem_pool_B)
+
+// [3/7] Pool1: 64x32x32 -> 64x16x16. 读 池B，写入 池A 的前 16KB
+#define buf_pool1 (mem_pool_A)
+
+// [4/7] Conv3: 64x16x16 -> 64x16x16. 读 池A，写入 池B 的前 16KB
+#define buf_conv3 (mem_pool_B)
+
+// [5/7] Conv4: 64x16x16 -> 64x16x16. 读 池B，写入 池A 的前 16KB
+#define buf_conv4 (mem_pool_A)
+
+// [6/7] Pool2: 64x16x16 -> 64x8x8. 读 池A，写入 池B 的前 4KB
+#define buf_pool2 (mem_pool_B)
+
+// [7/7] FC: 64x8x8 -> 10. 读 池B，写入 池A 的空闲区域 (安全起见复用在池A起始)
+#define buf_fc    (mem_pool_A)
 
 int main() {
     // 开启中断

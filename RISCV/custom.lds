@@ -4,7 +4,7 @@ ENTRY(_start)
 /* 定义物理内存布局 (起始于 0x0 的 1MB SRAM) */
 /* SRAM 为 1MB */
 MEMORY {
-    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 1024K
+    SRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 512K
 }
 
 SECTIONS
